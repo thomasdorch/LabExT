@@ -11,7 +11,7 @@ import numpy as np
 from typing import Type
 from enum import Enum, auto
 
-from LabExT.Movement.Transformations import KabschRotation, SinglePointFixation
+from LabExT.Movement.Transformations import KabschRotation, SinglePointFixation, make_3d_coordinate
 from LabExT.Movement.Stage import StageError
 
 
@@ -154,7 +154,7 @@ class AxesRotation:
             raise CalibrationError(
                 "The current axis assignment does not define a valid 90 degree rotation. ")
 
-        return self._matrix.dot(np.array(chip_relative_difference))
+        return self._matrix.dot(make_3d_coordinate(chip_relative_difference))
 
 
 class Calibration:
@@ -336,6 +336,21 @@ class Calibration:
     #
     #   Movement Methods
     #
+
+    @assert_minimum_calibration_state(State.COORDINATE_SYSTEM_FIXED)
+    def move_relative(self, chip_relative_difference):
+        """
+        Moves the stage relative to the chip coordinate system.
+        Takes a vector [x,y,z] in chip coordinate system, transforms it into a vector [x',y',z']
+        relative to the stage coordinate system and executes the movement.
+        """
+        stage_relative_difference = self._axes_rotation.chip_to_stage(chip_relative_difference)
+        self.stage.move_relative(
+            x=stage_relative_difference[0],
+            y=stage_relative_difference[1],
+            z=stage_relative_difference[2] 
+        )
+
 
     @assert_minimum_calibration_state(State.CONNECTED)
     def wiggle_axis(

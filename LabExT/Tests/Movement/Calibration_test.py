@@ -260,6 +260,46 @@ class SanityCheckTest(unittest.TestCase):
         self.stage.get_status.side_effect = StageError
         self.assertEqual(State.UNINITIALIZED, self.calibration.sanity_check())
 
+class MoveRelativeTest(unittest.TestCase):
+    @with_stage_discovery_patch
+    def setUp(self, available_stages_mock, stage_classes_mock) -> None:
+        stage_classes_mock.return_value = []
+        available_stages_mock.return_value = []
+        
+        self.mover = MoverNew(None)
+        self.stage = Mock(spec=Stage)
+        self.stage.connected = False
+
+        self.calibration = self.mover.add_stage_calibration(self.stage, Orientation.LEFT, DevicePort.INPUT)
+        self.calibration.connect_to_stage()
+
+    def test_move_relative_raises_error_if_coordinate_system_isnt_fixed(self):
+        with self.assertRaises(CalibrationError):
+            self.calibration.move_relative([1,2,3])
+
+    def test_move_relative_applies_rotation(self):
+        axes_rotation = AxesRotation()
+        axes_rotation.update(
+            chip_axis=Axis.Y,
+            stage_axis=Axis.X,
+            direction=Direction.POSITIVE)
+        axes_rotation.update(
+            chip_axis=Axis.Z,
+            stage_axis=Axis.Y,
+            direction=Direction.NEGATIVE)
+        axes_rotation.update(
+            chip_axis=Axis.X,
+            stage_axis=Axis.Z,
+            direction=Direction.NEGATIVE)
+
+        self.assertTrue(axes_rotation.is_valid)
+        self.calibration.fix_coordinate_system(axes_rotation)
+
+        self.calibration.move_relative([100,200,300])
+
+        self.stage.move_relative.assert_called_once_with(
+            x=200, y=-300, z=-100)   
+
 class CalibrationTest(unittest.TestCase):
     @with_stage_discovery_patch
     def setUp(self, available_stages_mock, stage_classes_mock) -> None:
