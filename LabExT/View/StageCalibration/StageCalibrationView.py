@@ -450,7 +450,8 @@ class StageCalibrationView(Wizard):
         """
         if(len(pairings) > 0):
             self._current_single_point_fixations[calibration].update(
-                pairings[0])
+                pairings[0],
+                calibration._axes_rotation)
 
         self.__reload__()
 

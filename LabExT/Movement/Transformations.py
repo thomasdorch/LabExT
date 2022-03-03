@@ -92,14 +92,14 @@ class SinglePointFixation(Transformation):
         """
         return self._offset is not None
 
-    def update(self, pairing: Type[CoordinatePairing]):
+    def update(self, pairing: Type[CoordinatePairing], axes_rotation):
         """
         Updates the offset based on a coordinate pairing.
         """
         if pairing.chip_coordinate is None or pairing.stage_coordinate is None:
             raise ValueError("Incomplete Pairing")
 
-        self._chip_coordinate = make_3d_coordinate(pairing.chip_coordinate)
+        self._chip_coordinate = axes_rotation.chip_to_stage(pairing.chip_coordinate)
         self._stage_coordinate = make_3d_coordinate(pairing.stage_coordinate)
 
         self._offset = self._stage_coordinate - self._chip_coordinate

@@ -351,6 +351,19 @@ class Calibration:
             z=stage_relative_difference[2] 
         )
 
+    @assert_minimum_calibration_state(State.SINGLE_POINT_FIXED)
+    def move_absolute_approximated(self, chip_absolute_cooridnate):
+        """
+        Moves the stage approximated absolute in the chip cooridnate system when using single-point fixation.
+        """
+        self.stage.move_absolute(self._single_point_fixation.chip_to_stage(chip_absolute_cooridnate))
+
+    @assert_minimum_calibration_state(State.FULLY_CALIBRATED)
+    def move_absolute(self, chip_absolute_cooridnate):
+        """
+        Moves the stage exactly absolute in the chip cooridnate system when applying full calibration.
+        """
+        self.stage.move_absolute(self._full_calibration.chip_to_stage(chip_absolute_cooridnate))
 
     @assert_minimum_calibration_state(State.CONNECTED)
     def wiggle_axis(

@@ -260,7 +260,7 @@ class SanityCheckTest(unittest.TestCase):
         self.stage.get_status.side_effect = StageError
         self.assertEqual(State.UNINITIALIZED, self.calibration.sanity_check())
 
-class MoveRelativeTest(unittest.TestCase):
+class MovementTest(unittest.TestCase):
     @with_stage_discovery_patch
     def setUp(self, available_stages_mock, stage_classes_mock) -> None:
         stage_classes_mock.return_value = []
