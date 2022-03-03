@@ -72,6 +72,7 @@ class MovementWizardView(Wizard):
         self.z_speed_var = DoubleVar(self.parent, self.mover.DEFAULT_SPEED_Z)
         self.xy_acceleration_var = DoubleVar(
             self.parent, self.mover.DEFAULT_ACCELERATION_XY)
+        self.z_lift_var = DoubleVar(self.parent, self.mover.DEFAULT_Z_LIFT)
 
         # Connect Steps
         self.load_driver_step.next_step = self.assign_stages_step
@@ -265,6 +266,18 @@ class MovementWizardView(Wizard):
                 self.mover.ACCELERATION_LOWER_BOUND,
                 self.mover.ACCELERATION_UPPER_BOUND),
             unit="[um/s^2]")
+
+        stage_lift_frame = CustomFrame(frame)
+        stage_lift_frame.title = "Z-Lift"
+        stage_lift_frame.pack(side=TOP, fill=X)
+
+        self._build_entry_with_label(
+            stage_lift_frame,
+            self.z_lift_var,
+            label="Z channel up-movement during xy movement:",
+            unit="[um]")
+
+
     #
     #   Callbacks
     #
@@ -279,6 +292,8 @@ class MovementWizardView(Wizard):
             self.z_speed_var, float, self.mover.DEFAULT_SPEED_Z)
         acceleration_xy = self._get_safe_value(
             self.xy_acceleration_var, float, self.mover.DEFAULT_ACCELERATION_XY)
+        z_lift = self._get_safe_value(
+            self.z_lift_var, float, self.mover.DEFAULT_Z_LIFT)
 
         if self._warn_user_about_zero_speed(
                 speed_xy) and self._warn_user_about_zero_speed(speed_z):
@@ -287,7 +302,8 @@ class MovementWizardView(Wizard):
                     stage_assignment=self._current_stage_assignment,
                     speed_xy=speed_xy,
                     speed_z=speed_z,
-                    acceleration_xy=acceleration_xy
+                    acceleration_xy=acceleration_xy,
+                    z_lift=z_lift
                 )
                 messagebox.showinfo(message="Successfully connected to {} stages.".format(
                     len(self._current_stage_assignment)))

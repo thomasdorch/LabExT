@@ -53,6 +53,8 @@ class MoverNew:
     DEFAULT_SPEED_Z = 20.0
     DEFAULT_ACCELERATION_XY = 0.0
 
+    DEFAULT_Z_LIFT = 20.0
+
     def __init__(self, experiment_manager):
         """Constructor.
 
@@ -72,6 +74,7 @@ class MoverNew:
         self._speed_xy = None
         self._speed_z = None
         self._acceleration_xy = None
+        self._z_lift = self.DEFAULT_SPEED_Z
 
         self.reload_stages()
         self.reload_stage_classes()
@@ -85,6 +88,7 @@ class MoverNew:
         self._speed_xy = None
         self._speed_z = None
         self._acceleration_xy = None
+        self._z_lift = self.DEFAULT_SPEED_Z
 
     def reset_calibrations(self):
         """
@@ -326,6 +330,24 @@ class MoverNew:
             raise MoverError("Acceleration xy speed failed: {}".format(exec))
 
         self._acceleration_xy = umps2
+
+    @property
+    def z_lift(self):
+        """
+        Returns the set value of how much the stage moves up
+        :return: how much the stage moves up [um]
+        """
+        return self._z_lift
+
+    @z_lift.setter
+    def z_lift(self, height):
+        """
+        Sets the value of how much the stage moves up
+        :param height: how much the stage moves up [um]
+        """
+        height = float(height)
+        assert height >= 0.0, "Lift distance must be non-negative."
+        self._z_lift = height
 
     #
     #   Helpers

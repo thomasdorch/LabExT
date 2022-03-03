@@ -27,6 +27,7 @@ class MovementWizardController:
         speed_xy: float = MoverNew.DEFAULT_SPEED_XY,
         speed_z: float = MoverNew.DEFAULT_SPEED_Z,
         acceleration_xy: float = MoverNew.DEFAULT_ACCELERATION_XY,
+        z_lift: float = MoverNew.DEFAULT_Z_LIFT
     ):
         """
         Saves mover configuration.
@@ -52,6 +53,7 @@ class MovementWizardController:
             self.mover.speed_xy = speed_xy
             self.mover.speed_z = speed_z
             self.mover.acceleration_xy = acceleration_xy
+            self.mover.z_lift = z_lift
 
         # Refresh Context Menu
         if self.experiment_manager:

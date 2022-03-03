@@ -219,7 +219,8 @@ class MovementWizardControllerTest(unittest.TestCase):
             },
             speed_xy=300,
             speed_z=400,
-            acceleration_xy=100
+            acceleration_xy=100,
+            z_lift=100
         )
 
         self.assertTrue(self.mover.has_connected_stages)
@@ -251,6 +252,7 @@ class MovementWizardControllerTest(unittest.TestCase):
             100, self.mover.output_calibration.stage.get_acceleration_xy())
         self.assertEqual(100, self.mover.acceleration_xy)
 
+        self.assertEqual(self.mover.z_lift, 100)
 
 class MovementWizardIntegrationTest(TKinterTestCase):
     def setUp(self):
@@ -362,6 +364,7 @@ class MovementWizardIntegrationTest(TKinterTestCase):
         wizard.xy_speed_var.set(400)
         wizard.z_speed_var.set(200)
         wizard.xy_acceleration_var.set(100)
+        wizard.z_lift_var.set(10)
 
         with patch("LabExT.View.MovementWizard.MovementWizardView.messagebox.showinfo", autospec=True) as messagebox_mock:
             wizard._finish_button.invoke()
@@ -399,6 +402,8 @@ class MovementWizardIntegrationTest(TKinterTestCase):
             self.assertEqual(
                 100, self.mover.output_calibration.stage.get_acceleration_xy())
             self.assertEqual(100, self.mover.acceleration_xy)
+
+            self.assertEqual(10, self.mover.z_lift)
 
             # Check if stages are connected
             self.assertTrue(stage.connected)
