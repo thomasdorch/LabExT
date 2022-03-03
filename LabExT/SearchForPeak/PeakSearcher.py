@@ -9,6 +9,8 @@ import json
 import logging
 import os
 import time
+from typing import Type
+from LabExT.Movement.MoverNew import MoverNew
 
 import numpy as np
 from scipy.optimize import curve_fit
@@ -86,7 +88,7 @@ class PeakSearcher(Measurement):
         self._parent = parent
         self.name = "SearchForPeak-2DGaussianFit"
         self.settings_filename = "PeakSearcher_settings.json"
-        self.mover = mover
+        self.mover : Type[MoverNew] = mover
 
         self.logger = logging.getLogger()
 
@@ -216,8 +218,8 @@ class PeakSearcher(Measurement):
             and gaussian fitting information.
         """
         # double check if mover is actually enabled
-        if not self.mover.mover_enabled:
-            raise RuntimeError('Mover class is disabled! Cannot do automatic search for peak.')
+        if not self.mover.has_connected_stages:
+            raise RuntimeError('Mover has no connected stages! Cannot do automatic search for peak.')
 
         # load laser and powermeter
         self.instr_powermeter = self.get_instrument('Power Meter')
@@ -263,8 +265,8 @@ class PeakSearcher(Measurement):
         self.instr_powermeter.range = self.parameters['Power Meter range'].value
 
         # get stage speed for later reference
-        v0 = self.mover.get_speed_of_stages_xy()
-        acc0 = self.mover.get_acceleration_of_stages_xy()
+        v0 = self.mover.speed_xy
+        acc0 = self.mover.acceleration_xy
 
         # stop all previous logging
         self.instr_powermeter.logging_stop()
@@ -302,7 +304,7 @@ class PeakSearcher(Measurement):
             color_strings = ['C' + str(i) for i in range(10)]  # color cycle strings for matplotlib
             for dimidx, p_start in enumerate(start_coordinates):
 
-                dimension_name = self.mover.dimension_names[dimidx]
+                dimension_name = "Unknown Dimension name" # TODO
 
                 # create new plotting dataset for measurement
                 meas_plot = PlotData(ObservableList(), ObservableList(),
@@ -331,7 +333,7 @@ class PeakSearcher(Measurement):
                         )
                     # move stage to initial position and setup
                     current_coordinates[dimidx] = p_start - radius_us
-                    self.mover.move_absolute(*current_coordinates, safe_movement=False, lift_z_dir=False)
+                    self.mover.move_absolute_direct(*current_coordinates)
                     # setup power meter logging feature
                     self.instr_powermeter.autogain = False  # autogain attribute exists only for N7744A, no effect on other
                     self.instr_powermeter.range = self.parameters['Power Meter range'].value
@@ -348,12 +350,12 @@ class PeakSearcher(Measurement):
                     current_coordinates[dimidx] = p_start + radius_us
                     # empirically determined acceleration
                     acc_umps2 = 50
-                    self.mover.set_speed_of_stages_xy(v_sweep_ums)
-                    self.mover.set_acceleration_of_stages_xy(acc_umps2)
+                    self.mover.speed_xy = v_sweep_ums
+                    self.mover.acceleration_xy = acc_umps2
                     # start logging at powermeter
                     self.instr_powermeter.trigger()
                     # mover_time_lower = time.time()
-                    self.mover.move_absolute(*current_coordinates, safe_movement=False, lift_z_dir=False)
+                    self.mover.move_absolute_direct(*current_coordinates)
                     # mover_time_upper = time.time()
 
                     while self.instr_powermeter.logging_busy():
@@ -384,7 +386,7 @@ class PeakSearcher(Measurement):
                     for measidx, d_current in enumerate(d_range):
                         # move stages to currently probed coordinate
                         current_coordinates[dimidx] = d_current + p_start
-                        self.mover.move_absolute(*current_coordinates, safe_movement=False, lift_z_dir=False)
+                        self.mover.move_absolute_direct(*current_coordinates)
 
                         # take a break to let fiber-vibration die off
                         time.sleep(pause_time_ms / 1000)
@@ -467,12 +469,12 @@ class PeakSearcher(Measurement):
                 }
 
                 # reset speed and acceleration to original
-                self.mover.set_speed_of_stages_xy(v0)
-                self.mover.set_acceleration_of_stages_xy(acc0)
+                self.mover.speed_xy = v0
+                self.mover.acceleration_xy = acc0
 
                 # final move of fiber in this dimensions final decision
                 current_coordinates[dimidx] = optimized_target + p_start
-                self.mover.move_absolute(*current_coordinates)
+                self.mover.move_absolute(left=current_coordinates[:2], right=current_coordinates[2:])
 
         # close instruments
         self.instr_laser.close()

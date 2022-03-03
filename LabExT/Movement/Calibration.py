@@ -334,6 +334,19 @@ class Calibration:
         return True
 
     #
+    #   Position Methods
+    #
+
+    @property
+    @assert_minimum_calibration_state(State.FULLY_CALIBRATED)
+    def position(self):
+        """
+        Returns the current position of the stage in chip coordinates
+        """
+        return self._full_calibration.stage_to_chip(self.stage.position)
+
+
+    #
     #   Movement Methods
     #
 

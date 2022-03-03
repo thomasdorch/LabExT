@@ -5,6 +5,7 @@ LabExT  Copyright (C) 2022  ETH Zurich and Polariton Technologies AG
 This program is free software and comes with ABSOLUTELY NO WARRANTY; for details see LICENSE file.
 """
 
+from LabExT.Movement.Transformations import make_3d_coordinate
 from bidict import bidict, ValueDuplicationError, KeyDuplicationError, OnDup, RAISE
 from typing import Type, List
 from functools import wraps
@@ -75,6 +76,7 @@ class MoverNew:
         self._speed_z = None
         self._acceleration_xy = None
         self._z_lift = self.DEFAULT_SPEED_Z
+        self._stages_lifted = False
 
         self.reload_stages()
         self.reload_stage_classes()
@@ -362,6 +364,140 @@ class MoverNew:
         height = float(height)
         assert height >= 0.0, "Lift distance must be non-negative."
         self._z_lift = height
+
+    #
+    #   LEGACY SUPPORT!!
+    #
+
+    @assert_connected_stages
+    def get_absolute_stage_coords(self):
+        """Read stage positions in all two resp. four dimensions in um.
+
+           return format for 2 stages is [lx, ly, rx, ry]
+           return format for 1 stage is [lx, ly]
+
+        Returns
+        ----------
+        list of double
+            current absolute stage coordinates of all configured dimensions
+
+        Raises
+        ------
+        RuntimeError
+            If stages could not be initialised.
+        """
+        coords = []
+        for stage in self.active_stages:
+            coords += stage.get_current_position()
+
+        return coords
+
+    @assert_connected_stages
+    def move_absolute_direct(self, *args):
+        if self.left_calibration:
+            self.left_calibration.stage.move_absolute([args[0], args[1], 0])
+        if self.right_calibration:
+            self.right_calibration.stage.move_absolute([args[2], args[3], 0])
+
+    #
+    #   Movement Methods
+    #
+
+    @assert_connected_stages
+    def move_absolute(self, left=[], right=[], lift_z_dir=False, min_fiber_distance=1.1 * 125.0):
+        if lift_z_dir:
+            self.lift_stages()
+
+        x0l = self.left_calibration.position[0]
+        x0r = self.right_calibration.position[0]
+        x1l = left[0]
+        x1r = right[0]
+
+        assert min_fiber_distance > 0.0, "Fiber distance must be greater than 0, otherwise half-planes of fibers overlap."
+        assert x0l < x0r - min_fiber_distance, "For this collision avoidance algorithm to work, the left stage must " \
+                                            "ALWAYS be left of the right stage. Starting points not far enough apart..."
+        assert x1l < x1r - min_fiber_distance, "For this collision avoidance algorithm to work, the left stage must " \
+                                            "ALWAYS be left of the right stage. Target points not far enough apart..."
+
+        delta_l = x1l - x0l  # delta movement of x coordinate of left stage
+        delta_r = x1r - x0r  # delta movement of x coordinate of right stage
+        # case handling, depending on the half-plane's relative move
+        # noinspection PyChainedComparisons
+        if delta_l < 0 and delta_r < 0:
+            # obv. left moves first
+            #  1. move left stage from start to target
+            #  2. move right stage from start to target
+            self.left_calibration.move_absolute(left)
+            self.right_calibration.move_absolute(right)
+        elif delta_l < 0 and delta_r >= 0:
+            # doesnt matter which one moves first as both move avay from each other
+            #  1. move left stage from start to target
+            #  2. move right stage from start to target
+            self.left_calibration.move_absolute(left)
+            self.right_calibration.move_absolute(right)
+        elif delta_l >= 0 and delta_r < 0:
+            # this can lead to collisions, but since end coordinates are also far enough apart, we are good to go
+            #  1. move right stage from start to target
+            #  2. move left stage from start to target
+            self.right_calibration.move_absolute(right)
+            self.left_calibration.move_absolute(left)
+        elif delta_l >= 0 and delta_r >= 0:
+            # obv. right moves first
+            #  1. move right stage from start to target
+            #  2. move left stage from start to target
+            self.right_calibration.move_absolute(right)
+            self.left_calibration.move_absolute(left)
+        else:
+            raise AssertionError('Coder did not do proper case distinction for positive-ness of two variables!')
+
+        if lift_z_dir:
+            self.lower_stages()
+
+    @assert_connected_stages
+    def move_relative(self, left=[], right=[], lift_z_dir=False):
+        self.move_absolute(
+            left=make_3d_coordinate(self.left_calibration.position) + make_3d_coordinate(left),
+            right=make_3d_coordinate(self.left_calibration.position) + make_3d_coordinate(right),
+            lift_z_dir=lift_z_dir
+        )
+
+
+    @assert_connected_stages
+    def lift_stages(self):
+        if self._stages_lifted:
+            return
+
+        for calibration in self.calibrations.values():
+            calibration.move_relative([0,0,self.z_lift])
+
+        self._stages_lifted = True
+
+    @assert_connected_stages
+    def lower_stages(self):
+        if not self._stages_lifted:
+            return
+
+        for calibration in self.calibrations.values():
+            calibration.move_relative([0,0,-self.z_lift])
+
+        self._stages_lifted = False
+
+    @assert_connected_stages
+    def move_to_device(self, device):
+        """Moves to a specific device on the chip.
+
+        Parameters
+        ----------
+        device : Device
+            Device to move to.
+
+        Raises
+        ------
+        RuntimeError
+            If no 2D transformation has been done beforehand.
+        """
+        self.move_absolute(left=device._in_position, right=device._out_position)
+
 
     #
     #   Helpers

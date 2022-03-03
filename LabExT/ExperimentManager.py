@@ -66,7 +66,7 @@ class ExperimentManager:
         self.chip = chip
         self.mover = Mover(self)
         self.mover_new = MoverNew(self)
-        self.peak_searcher = PeakSearcher(None, self, mover=self.mover, parent=self.root)
+        self.peak_searcher = PeakSearcher(None, self, mover=self.mover_new, parent=self.root)
         self.instrument_api = InstrumentAPI(self)
         self.docu = None
         self.live_viewer_cards = {}
