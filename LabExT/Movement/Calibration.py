@@ -218,6 +218,10 @@ class Calibration:
         """
         return self._device_port == DevicePort.OUTPUT
 
+    @property
+    def can_move_absolute(self):
+        return self._state == State.SINGLE_POINT_FIXED or self._state == State.FULLY_CALIBRATED
+
     #
     #   Sanity check
     #

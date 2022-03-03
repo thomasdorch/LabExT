@@ -6,6 +6,7 @@ This program is free software and comes with ABSOLUTELY NO WARRANTY; for details
 """
 
 from tkinter import Frame, Toplevel, Button, Label, messagebox, LEFT, RIGHT, TOP, X, BOTH, DISABLED, FLAT, NORMAL, Y
+from LabExT.Utils import run_with_wait_window
 from LabExT.View.Controls.CoordinateWidget import CoordinateWidget
 from LabExT.View.Controls.CustomFrame import CustomFrame
 from LabExT.View.Controls.DeviceTable import DeviceTable
@@ -211,6 +212,8 @@ class CoordinatePairingsWindow(Toplevel):
                 parent=self)
             return
 
+        self._ask_user_move_to_device()
+
         self.__reload__()
 
     def _on_device_selection_clear(self):
@@ -219,6 +222,30 @@ class CoordinatePairingsWindow(Toplevel):
         """
         self._device = None
         self.__reload__()
+
+    def _ask_user_move_to_device(self):
+        if self._device is None:
+            return
+
+        if self._in_calibration and self._in_calibration.can_move_absolute:
+            stage_inport = self._in_calibration._single_point_fixation.chip_to_stage(self._device._in_position)
+            if messagebox.askyesno(
+                title="Move to device?",
+                message="Your input stage can move approximately absolutely in the chip coordinate system. Do you want to move to the input port? DEBUG APPROX: {}".format(stage_inport),
+                parent=self):
+                    run_with_wait_window(
+                        self, description="Move {} to {}".format(
+                            self._in_calibration, self._device.short_str()), function=lambda: self._in_calibration.move_absolute_approximated(self._device._in_position))
+
+        if self._out_calibration and self._out_calibration.can_move_absolute:
+            stage_output = self._out_calibration._single_point_fixation.chip_to_stage(self._device._out_position)
+            if messagebox.askyesno(
+                title="Move to device?",
+                message="Your output stage can move approximately absolutely in the chip coordinate system. Do you want to move to the output port? DEBUG APPROX: {}".format(stage_output),
+                parent=self):
+                    run_with_wait_window(
+                        self, description="Move {} to {}".format(
+                            self._out_calibration, self._device.short_str()), function=lambda: self._in_calibration.move_absolute_approximated(self._device._out_position))
 
     #
     #   Helpers

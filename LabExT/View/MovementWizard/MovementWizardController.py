@@ -59,8 +59,6 @@ class MovementWizardController:
         if self.experiment_manager:
             self.experiment_manager.main_window.refresh_context_menu()
 
-        self.mover.move_absolute_direct(*[1,2,3,4])
-
     def load_driver(self, stage_class: Type[Stage]):
         """
         Invokes the load_driver function of some Stage class.
