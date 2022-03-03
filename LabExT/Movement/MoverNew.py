@@ -134,6 +134,10 @@ class MoverNew:
         return states.pop()
 
     @property
+    def fully_calibrated(self):
+        return self.state == State.FULLY_CALIBRATED
+
+    @property
     def stage_classes(self) -> List[Stage]:
         """
         Returns a list of all Stage classes.
@@ -404,10 +408,7 @@ class MoverNew:
     #
 
     @assert_connected_stages
-    def move_absolute(self, left=[], right=[], lift_z_dir=False, min_fiber_distance=1.1 * 125.0):
-        if lift_z_dir:
-            self.lift_stages()
-
+    def move_absolute(self, left=[], right=[], min_fiber_distance=1.1 * 125.0):
         x0l = self.left_calibration.position[0]
         x0r = self.right_calibration.position[0]
         x1l = left[0]
@@ -450,16 +451,12 @@ class MoverNew:
         else:
             raise AssertionError('Coder did not do proper case distinction for positive-ness of two variables!')
 
-        if lift_z_dir:
-            self.lower_stages()
 
     @assert_connected_stages
-    def move_relative(self, left=[], right=[], lift_z_dir=False):
+    def move_relative(self, left=[], right=[]):
         self.move_absolute(
             left=make_3d_coordinate(self.left_calibration.position) + make_3d_coordinate(left),
-            right=make_3d_coordinate(self.left_calibration.position) + make_3d_coordinate(right),
-            lift_z_dir=lift_z_dir
-        )
+            right=make_3d_coordinate(self.left_calibration.position) + make_3d_coordinate(right))
 
 
     @assert_connected_stages
@@ -496,7 +493,11 @@ class MoverNew:
         RuntimeError
             If no 2D transformation has been done beforehand.
         """
+        self.lift_stages()
+
         self.move_absolute(left=device._in_position, right=device._out_position)
+
+        self.lower_stages()
 
 
     #

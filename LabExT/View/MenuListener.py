@@ -236,7 +236,7 @@ class MListener:
         self.stage_movement_toplevel.attributes('-topmost', 'true')
 
         self._params = {}
-        for dim_name in self._experiment_manager.mover.dimension_names:
+        for dim_name in ['Left X', 'Left Y', 'Right X', 'Right Y']:
             self._params[dim_name] = ConfigParameter(self.stage_movement_toplevel, unit='um', parameter_type='number_float')
 
         param_table = ParameterTable(self.stage_movement_toplevel)
@@ -257,12 +257,15 @@ class MListener:
         """
         # get values from input fields
         relative_moves = []
-        for dim_name in self._experiment_manager.mover.dimension_names:
+        for dim_name in ['Left X', 'Left Y', 'Right X', 'Right Y']:
             relative_moves.append(self._params[dim_name].value)
         self.logger.info('Client wants to move stages manually - %s', relative_moves)
 
         try:
-            self._experiment_manager.mover.move_relative(*relative_moves, lift_z_dir=True)
+            self._experiment_manager.mover_new.lift_stages()
+            self._experiment_manager.mover_new.move_relative(
+                left=relative_moves[:2], right=relative_moves[2:])
+            self._experiment_manager.mover_new.lower_stages()
         except Exception as exc:
             msg = 'Could not move stages manually! Reason: ' + repr(exc)
             messagebox.showinfo('Error', msg)
@@ -279,7 +282,8 @@ class MListener:
             messagebox.showerror('No chip layout', msg)
             self.logger.error(msg)
             return
-        if not self._experiment_manager.mover.trafo_enabled:
+
+        if not self._experiment_manager.mover_new.fully_calibrated:
             msg = 'Stage coordinates not calibrated to chip. ' + \
                   'Please calibrate the coordinate transformation first before moving the stages automatically.'
             messagebox.showerror('Error: No transformation', msg)
@@ -311,7 +315,7 @@ class MListener:
         run_with_wait_window(
             self._root,
             "Moving to device...",
-            lambda: self._experiment_manager.mover.move_to_device(device))
+            lambda: self._experiment_manager.mover_new.move_to_device(device))
 
         msg = 'Successfully moved to device with ID: ' + str(device._id)
         messagebox.showinfo('Success', msg)
