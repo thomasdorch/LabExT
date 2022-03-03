@@ -699,15 +699,14 @@ class Stage3DSmarAct(Stage):
             'Want to absolute move %s to x = %s um and y = %s um',
             self.address,
             pos[0],
-            pos[1],
-            pos[2])
+            pos[1])
 
         self.channels[Axis.X].move(
             diff=pos[0], mode=MovementType.ABSOLUTE)
         self.channels[Axis.Y].move(
             diff=pos[1], mode=MovementType.ABSOLUTE)
-        self.channels[Axis.Z].move(
-            diff=pos[2], mode=MovementType.ABSOLUTE)
+        # self.channels[Axis.Z].move(
+        #     diff=pos[2], mode=MovementType.ABSOLUTE)
 
         if wait_for_stopping:
             self._wait_for_stopping()

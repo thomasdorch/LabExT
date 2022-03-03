@@ -228,7 +228,7 @@ class CoordinatePairingsWindow(Toplevel):
             return
 
         if self._in_calibration and self._in_calibration.can_move_absolute:
-            stage_inport = self._in_calibration._single_point_fixation.chip_to_stage(self._device._in_position + [20])
+            stage_inport = self._in_calibration._single_point_fixation.chip_to_stage(self._device._in_position)
             if messagebox.askyesno(
                 title="Move to device?",
                 message="Your input stage can move approximately absolutely in the chip coordinate system. Do you want to move to the input port? DEBUG APPROX: {}".format(stage_inport),
@@ -236,18 +236,18 @@ class CoordinatePairingsWindow(Toplevel):
                     run_with_wait_window(
                         self, description="Move {} to {}".format(
                             self._in_calibration, self._device.short_str()), function=lambda: self._in_calibration.move_absolute_approximated(
-                                self._device._in_position + [20]))
+                                self._device._in_position, z_lift=20))
 
         if self._out_calibration and self._out_calibration.can_move_absolute:
-            stage_output = self._out_calibration._single_point_fixation.chip_to_stage(self._device._out_position + [20])
+            stage_output = self._out_calibration._single_point_fixation.chip_to_stage(self._device._out_position)
             if messagebox.askyesno(
                 title="Move to device?",
                 message="Your output stage can move approximately absolutely in the chip coordinate system. Do you want to move to the output port? DEBUG APPROX: {}".format(stage_output),
                 parent=self):
                     run_with_wait_window(
                         self, description="Move {} to {}".format(
-                            self._out_calibration, self._device.short_str()), function=lambda: self._in_calibration.move_absolute_approximated(self._device._out_position
-                            + [-20]))
+                            self._out_calibration, self._device.short_str()), function=lambda: self._in_calibration.move_absolute_approximated(
+                                self._device._out_position, z_lift=20))
 
     #
     #   Helpers

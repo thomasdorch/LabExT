@@ -369,11 +369,17 @@ class Calibration:
         )
 
     @assert_minimum_calibration_state(State.SINGLE_POINT_FIXED)
-    def move_absolute_approximated(self, chip_absolute_cooridnate):
+    def move_absolute_approximated(self, chip_absolute_cooridnate, z_lift=0):
         """
         Moves the stage approximated absolute in the chip cooridnate system when using single-point fixation.
         """
+        if z_lift > 0:
+            self.stage.move_relative([0,0,z_lift])
+
         self.stage.move_absolute(self._single_point_fixation.chip_to_stage(chip_absolute_cooridnate))
+
+        if z_lift > 0:
+            self.stage.move_relative([0,0,-z_lift])
 
     @assert_minimum_calibration_state(State.FULLY_CALIBRATED)
     def move_absolute(self, chip_absolute_cooridnate):
