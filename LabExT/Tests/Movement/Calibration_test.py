@@ -6,16 +6,15 @@ This program is free software and comes with ABSOLUTELY NO WARRANTY; for details
 """
 
 import unittest
-from unittest.mock import call, patch
+from unittest.mock import Mock, call, patch
 import numpy as np
 
 from LabExT.Tests.Utils import with_stage_discovery_patch
 from LabExT.Movement.Transformations import CoordinatePairing, Dimension, KabschRotation, SinglePointFixation
 from LabExT.Movement.MoverNew import MoverNew
-from LabExT.Movement.Stage import Stage
+from LabExT.Movement.Stage import Stage, StageError
 from LabExT.Movement.Stages.DummyStage import DummyStage
-from LabExT.Movement.Calibration import AxesRotation, Axis, Calibration, CalibrationError, DevicePort, Direction, Orientation, State
-
+from LabExT.Movement.Calibration import AxesRotation, Axis, Calibration, CalibrationError, DevicePort, Direction, Orientation, State, assert_minimum_calibration_state      
 
 class AxesRotationTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -103,14 +102,16 @@ class AxesRotationTest(unittest.TestCase):
 
 
 class WiggleAxisTest(unittest.TestCase):
-    def setUp(self) -> None:
-        # Create Mover instance without stage discovery
-        with patch.object(Stage, "find_available_stages", return_value=[]):
-            with patch.object(Stage, "find_stage_classes", return_value=[]):
-                self.mover = MoverNew(None)
-                self.stage = DummyStage('usb:123456789')
-                self.calibration = Calibration(
-                    self.mover, self.stage, Orientation.LEFT, DevicePort.INPUT)
+    @with_stage_discovery_patch
+    def setUp(self, available_stages_mock, stage_classes_mock) -> None:
+        stage_classes_mock.return_value = []
+        available_stages_mock.return_value = []
+        
+        self.mover = MoverNew(None)
+        self.stage = DummyStage('usb:123456789')
+
+        self.calibration = self.mover.add_stage_calibration(self.stage, Orientation.LEFT, DevicePort.INPUT)
+        self.calibration.connect_to_stage()
 
     def test_wiggle_axis_raises_error_if_axes_rotation_is_invalid(self):
         axes_rotation = AxesRotation()
@@ -171,6 +172,93 @@ class WiggleAxisTest(unittest.TestCase):
         set_speed_xy_mock.assert_has_calls(
             [call(5000), call(current_speed_xy)])
 
+
+class SanityCheckTest(unittest.TestCase):
+    @with_stage_discovery_patch
+    def setUp(self, available_stages_mock, stage_classes_mock) -> None:
+        stage_classes_mock.return_value = []
+        available_stages_mock.return_value = []
+
+        self.mover = MoverNew(None)
+        self.stage = Mock(spec=Stage)
+        self.stage.connected = True
+        
+        self.calibration = Calibration(
+            self.mover, self.stage, Orientation.LEFT, DevicePort.INPUT)
+
+        self.valid_axes_rotation = AxesRotation()
+        self.invalid_axes_rotation = AxesRotation()
+        self.invalid_axes_rotation.update(Axis.X, Axis.Y, Direction.POSITIVE)
+
+        self.valid_single_point = SinglePointFixation()
+        self.valid_single_point.update(CoordinatePairing(
+            self.calibration, [1,2,3], None, [4,5,6]))
+        self.invalid_single_point = SinglePointFixation()
+
+        self.valid_kabsch = KabschRotation()
+        self.valid_kabsch.change_rotation_dimension(Dimension.TWO)
+        self.valid_kabsch.update(CoordinatePairing(
+            self.calibration, [1,2,3], object(), [4,5,6]))
+        self.valid_kabsch.update(CoordinatePairing(
+            self.calibration, [7,8,9], object(), [8,7,6]))
+        self.invalid_kabsch = KabschRotation()
+
+    def test_with_no_stage(self):
+        self.calibration.stage = None
+        self.assertEqual(State.UNINITIALIZED, self.calibration.sanity_check())
+
+    def test_with_responding_stage(self):
+        self.stage.get_status.return_value = ['STATE']
+        self.assertEqual(State.CONNECTED, self.calibration.sanity_check())
+
+    def test_with_unresponding_stage(self):
+        self.stage.get_status.side_effect = StageError
+        self.assertEqual(State.UNINITIALIZED, self.calibration.sanity_check())
+
+    def test_with_axes_rotation(self):
+        self.stage.get_status.return_value = ['STATE']
+        self.calibration._axes_rotation = self.valid_axes_rotation
+        self.assertEqual(State.COORDINATE_SYSTEM_FIXED, self.calibration.sanity_check())
+
+        self.calibration._axes_rotation = self.invalid_axes_rotation
+        self.assertEqual(State.CONNECTED, self.calibration.sanity_check())
+
+        self.stage.get_status.side_effect = StageError
+        self.assertEqual(State.UNINITIALIZED, self.calibration.sanity_check())
+
+    def test_with_single_point_fixation(self):
+        self.stage.get_status.return_value = ['STATE']
+        self.calibration._axes_rotation = self.valid_axes_rotation
+        self.calibration._single_point_fixation = self.valid_single_point
+        self.assertEqual(State.SINGLE_POINT_FIXED, self.calibration.sanity_check())
+
+        self.calibration._single_point_fixation = self.invalid_axes_rotation
+        self.assertEqual(State.COORDINATE_SYSTEM_FIXED, self.calibration.sanity_check())
+
+        self.calibration._axes_rotation = self.invalid_axes_rotation
+        self.assertEqual(State.CONNECTED, self.calibration.sanity_check())
+        
+        self.stage.get_status.side_effect = StageError
+        self.assertEqual(State.UNINITIALIZED, self.calibration.sanity_check())
+
+    def test_with_full_calibration(self):
+        self.stage.get_status.return_value = ['STATE']
+        self.calibration._axes_rotation = self.valid_axes_rotation
+        self.calibration._single_point_fixation = self.valid_single_point
+        self.calibration._full_calibration = self.valid_kabsch
+        self.assertEqual(State.FULLY_CALIBRATED, self.calibration.sanity_check())
+
+        self.calibration._full_calibration = self.invalid_kabsch
+        self.assertEqual(State.SINGLE_POINT_FIXED, self.calibration.sanity_check())
+
+        self.calibration._single_point_fixation = self.invalid_axes_rotation
+        self.assertEqual(State.COORDINATE_SYSTEM_FIXED, self.calibration.sanity_check())
+
+        self.calibration._axes_rotation = self.invalid_axes_rotation
+        self.assertEqual(State.CONNECTED, self.calibration.sanity_check())
+        
+        self.stage.get_status.side_effect = StageError
+        self.assertEqual(State.UNINITIALIZED, self.calibration.sanity_check())
 
 class CalibrationTest(unittest.TestCase):
     @with_stage_discovery_patch

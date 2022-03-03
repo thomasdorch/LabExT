@@ -10,7 +10,7 @@ from typing import Type, List
 from functools import wraps
 
 from LabExT.Movement.Stage import Stage
-from LabExT.Movement.Calibration import Calibration, DevicePort, DevicePort, Orientation
+from LabExT.Movement.Calibration import Calibration, DevicePort, DevicePort, Orientation, State
 
 
 def assert_connected_stages(func):
@@ -116,6 +116,20 @@ class MoverNew:
     #
     #   Properties
     #
+
+    @property
+    def state(self) -> State:
+        """
+        Fetches states of all calibrations and returns the common one.
+        Raises MoverError if not all calibrations are in the same state.
+        """
+        if not self.has_connected_stages:
+            return State.UNINITIALIZED
+
+        states = set(c.state for c in self.calibrations.values())
+        if len(states) != 1:
+            raise MoverError("Not all Stages are in the same state!")
+        return states.pop()
 
     @property
     def stage_classes(self) -> List[Stage]:

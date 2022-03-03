@@ -6,7 +6,7 @@ This program is free software and comes with ABSOLUTELY NO WARRANTY; for details
 """
 
 from LabExT.View.StageCalibration.StageCalibrationView import StageCalibrationView
-from LabExT.Movement.Calibration import CalibrationError
+from LabExT.Movement.Calibration import CalibrationError, State
 
 
 class StageCalibrationController:
@@ -80,3 +80,10 @@ class StageCalibrationController:
             self.experiment_manager.main_window.refresh_context_menu()
 
         return True
+
+    def perform_sanity_check(self):
+        """
+        Checks if mover is in fully calibrated state and all stages pass sanity check.
+        """
+        return self.mover.state == State.FULLY_CALIBRATED and all(c.sanity_check(
+        ) == State.FULLY_CALIBRATED for c in self.mover.calibrations.values())

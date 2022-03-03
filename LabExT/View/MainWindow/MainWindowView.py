@@ -7,8 +7,9 @@ This program is free software and comes with ABSOLUTELY NO WARRANTY; for details
 
 import logging
 from platform import system
-from tkinter import Frame, Menu, Checkbutton, \
+from tkinter import DISABLED, Frame, Menu, Checkbutton, \
     Label, StringVar, OptionMenu, LabelFrame, Button, scrolledtext
+from tkinter.font import NORMAL
 
 from LabExT.Logs.LoggingWidgetHandler import LoggingWidgetHandler
 from LabExT.Utils import get_labext_version
@@ -25,8 +26,9 @@ class MainWindowContextMenu(Menu):
     """
     The context menu up top. Upon instantiation creates labels and submenus.
     """
-    def __init__(self, parent, menu_listener):
+    def __init__(self, parent, experiment_manger, menu_listener):
         self.parent = parent
+        self.experiment_manger = experiment_manger
         self._menu_listener = menu_listener
         Menu.__init__(self, self.parent)
         self._file = Menu(self, tearoff=0)
@@ -59,11 +61,18 @@ class MainWindowContextMenu(Menu):
             command=self._menu_listener.client_quit)
 
         self._movement_new.add_command(
+            label="Mover State: {}".format(self.experiment_manger.mover_new.state),
+            state=DISABLED)
+        self._movement_new.add_separator()
+        self._movement_new.add_command(
             label="Configure Stages...",
-            command=self._menu_listener.client_configure_mover)
+            command=self._menu_listener.client_configure_mover,
+            state=DISABLED if self.experiment_manger.mover_new.has_connected_stages else NORMAL)
         self._movement_new.add_command(
             label="Calibrate Stages...",
-            command=self._menu_listener.client_calibrate_mover)
+            command=self._menu_listener.client_calibrate_mover,
+            state=NORMAL if self.experiment_manger.mover_new.has_connected_stages else DISABLED)
+        self._movement_new.add_separator()
 
         self._movement.add_command(
             label="Configure Stages",
@@ -491,7 +500,7 @@ class MainWindowFrame(Frame):
         Sets up the menu bar up top.
         """
         self.menu_listener = MListener(self.experiment_manager, self.root)
-        self.menu = MainWindowContextMenu(self, self.menu_listener)
+        self.menu = MainWindowContextMenu(self, self.experiment_manager, self.menu_listener)
 
     def set_up_control_frame(self):
         """

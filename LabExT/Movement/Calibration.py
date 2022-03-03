@@ -5,6 +5,7 @@ LabExT  Copyright (C) 2022  ETH Zurich and Polariton Technologies AG
 This program is free software and comes with ABSOLUTELY NO WARRANTY; for details see LICENSE file.
 """
 
+from functools import wraps
 import time
 import numpy as np
 from typing import Type
@@ -71,9 +72,33 @@ class State(Enum):
     SINGLE_POINT_FIXED = 3
     FULLY_CALIBRATED = 4
 
+    def __lt__(self, other):
+        """
+        Defines a total ordering.
+        """
+        if self.__class__ is other.__class__:
+            return self.value < other.value
+        return NotImplemented
+
     def __str__(self) -> str:
         return self.name.replace('_', ' ').capitalize()
 
+
+def assert_minimum_calibration_state(state: State):
+    """
+    Use this decorator to assert that the calibration has at least a certain state.
+    """
+    def assert_state(func):
+        @wraps(func)
+        def wrapper(calibration, *args, **kwargs):
+            if(calibration.state < state):
+                raise CalibrationError(
+                    "Function {} needs at least a calibration state of {}".format(
+                        func.__name__, state))
+
+            return func(calibration, *args, **kwargs)
+        return wrapper
+    return assert_state
 
 class AxesRotation:
     """
@@ -194,6 +219,50 @@ class Calibration:
         return self._device_port == DevicePort.OUTPUT
 
     #
+    #   Sanity check
+    #
+
+    def sanity_check(self) -> State:
+        """
+        Calculates the status of the calibration independently of the status variables of the instance.
+        1. Checks whether the stage responds. If yes, status is at least CONNECTED.      
+        2. Checks if axis rotation is valid. If Yes, status is at least COORDINATE SYSTEM FIXED.
+        3. Checks if single point fixation is valid. If Yes, status is at least SINGLE POINT FIXED.
+        4. Checks if full calibration is valid. If Yes, status is FULLY CALIBRATED.
+        """
+        status = State.UNINITIALIZED
+
+        # 1. Check if stage responds
+        try:
+            if self.stage is None or self.stage.get_status() is None:
+                return status
+            status = State.CONNECTED
+        except StageError:
+            return status
+
+        assert status == State.CONNECTED
+
+        # 2. Check if axis rotation is valid
+        if self._axes_rotation is None or not self._axes_rotation.is_valid:
+            return status
+        status = State.COORDINATE_SYSTEM_FIXED
+
+        assert status == State.COORDINATE_SYSTEM_FIXED
+
+        # 3. Check if single point fixation is valid
+        if self._single_point_fixation is None or not self._single_point_fixation.is_valid:
+            return status
+        status = State.SINGLE_POINT_FIXED
+
+        assert status == State.SINGLE_POINT_FIXED
+
+        # 4. Check if Full Calibration is valid
+        if self._full_calibration is None or not self._full_calibration.is_valid:
+            return status
+
+        return State.FULLY_CALIBRATED
+
+    #
     #   Calibration Setup Methods
     #
 
@@ -268,6 +337,7 @@ class Calibration:
     #   Movement Methods
     #
 
+    @assert_minimum_calibration_state(State.CONNECTED)
     def wiggle_axis(
             self,
             axis: Axis,

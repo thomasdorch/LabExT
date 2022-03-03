@@ -11,6 +11,7 @@ from LabExT.Movement.Stages.DummyStage import DummyStage
 from LabExT.Movement.Calibration import DevicePort, Orientation
 
 from LabExT.Movement.MoverNew import MoverError, MoverNew, Stage, assert_connected_stages
+from LabExT.Tests.Utils import with_stage_discovery_patch
 
 
 class AssertConnectedStagesTest(unittest.TestCase):

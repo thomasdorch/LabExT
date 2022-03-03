@@ -39,6 +39,7 @@ class StageCalibrationView(Wizard):
             width=1000,
             height=700,
             on_cancel=self._on_cancel,
+            on_finish=self._on_finish,
             cancel_button_label="Cancel and Close",
             finish_button_label="Finish and Save"
         )
@@ -311,6 +312,20 @@ class StageCalibrationView(Wizard):
     #
     #   Callback
     #
+
+    def _on_finish(self) -> bool:
+        """
+        Callback, when user wants to finish the calibration.
+        """
+        if self.controller.perform_sanity_check():
+            return True
+
+        messagebox.showerror(
+            "Error"
+            "Sanity Check failed: Not all stages are in fully calibrated state.",
+            parent=self)
+        return False
+        
 
     def _on_cancel(self) -> bool:
         """
