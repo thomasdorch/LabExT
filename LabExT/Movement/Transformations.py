@@ -123,11 +123,6 @@ class SinglePointFixation(Transformation):
         return make_3d_coordinate(stage_coordinate) - self._offset
 
 
-class Dimension(Enum):
-    TWO = 2
-    THREE = 3
-
-
 class KabschRotation(Transformation):
     """
     Estimate a rotation to optimally align two sets of vectors.
@@ -135,19 +130,14 @@ class KabschRotation(Transformation):
     Find a rotation to align a set of stage coordinates with a set of chip coordinates.
     For more information see Kabsch Algorithm.
 
-    We require 2 points for a 2D transformation (z-values are zero) and 3 points for a 3D transformation.
+    We require 3 points for a 3D transformation.
     More points are possible and may increase the accuracy.
     """
 
-    MIN_POINTS = {
-        Dimension.TWO: 2,
-        Dimension.THREE: 3
-    }
+    MIN_POINTS = 3
 
     def __init__(self) -> None:
         self.pairings = []
-
-        self._rotation_dimension = Dimension.THREE
 
         self._chip_coordinates = np.empty((0, 3), float)
         self._stage_coordinates = np.empty((0, 3), float)
@@ -161,7 +151,7 @@ class KabschRotation(Transformation):
     def __str__(self) -> str:
         if not self.is_valid:
             return "No valid rotation defined ({}/{} Points set)".format(
-                len(self.pairings), self.MIN_POINTS[self._rotation_dimension])
+                len(self.pairings), self.MIN_POINTS)
 
         return "Rotation defined with {} Points".format(len(self.pairings))
 
@@ -170,7 +160,7 @@ class KabschRotation(Transformation):
         """
         Returns True if Kabsch transformation is defined.
         """
-        return len(self.pairings) >= self.MIN_POINTS[self._rotation_dimension]
+        return len(self.pairings) >= self.MIN_POINTS
 
     @property
     def rmsd(self):
@@ -178,25 +168,6 @@ class KabschRotation(Transformation):
         Returns RMSD of rotation
         """
         return self._rmsd if self.is_valid else "-"
-
-    @property
-    def is_3D(self):
-        return self._rotation_dimension == Dimension.THREE
-
-    @property
-    def is_2D(self):
-        return self._rotation_dimension == Dimension.TWO
-
-    def change_rotation_dimension(self, dimension: Dimension) -> None:
-        """
-        Changes rotation dimension to specified dimension.
-        """
-        if dimension not in Dimension:
-            raise ValueError(
-                "Cannot change dimension: Invalid dimension {}".format(dimension))
-
-        self._rotation_dimension = dimension
-        self._recalculate_rotation()
 
     def update(self, pair: Type[CoordinatePairing]) -> None:
         """
@@ -221,7 +192,18 @@ class KabschRotation(Transformation):
             [make_3d_coordinate(pair.stage_coordinate)],
             axis=0)
 
-        self._recalculate_rotation()
+        # Calculate mean for each set
+        self._chip_offset = self._chip_coordinates.mean(axis=0)
+        self._stage_offset = self._stage_coordinates.mean(axis=0)
+
+        # Create Rotation with centered vectors
+        self._rotation, self._rmsd = Rotation.align_vectors(
+            (self._chip_coordinates - self._chip_offset),
+            (self._stage_coordinates - self._stage_offset))
+
+        self._ref_matrix = rmsd.kabsch(
+            (self._chip_coordinates - self._chip_offset),
+            (self._stage_coordinates - self._stage_offset))
 
     def chip_to_stage(self, chip_coordinate):
         """
@@ -232,16 +214,9 @@ class KabschRotation(Transformation):
 
         chip_coordinate = make_3d_coordinate(chip_coordinate)
 
-        if self.is_3D:
-            return self._rotation.apply(
-                chip_coordinate - self._chip_offset,
-                inverse=True) + self._stage_offset
-
-        if self.is_2D:
-            return np.append(self._rotation.inv().as_matrix()[:2, :2].dot(
-                (chip_coordinate - self._chip_offset)[:2]) + self._stage_offset[:2], chip_coordinate[2])
-
-        return chip_coordinate
+        return self._rotation.apply(
+            chip_coordinate - self._chip_offset,
+            inverse=True) + self._stage_offset
 
     def stage_to_chip(self, stage_coordinate):
         """
@@ -252,42 +227,5 @@ class KabschRotation(Transformation):
 
         stage_coordinate = make_3d_coordinate(stage_coordinate)
 
-        if self.is_3D:
-            return self._rotation.apply(
-                stage_coordinate - self._stage_offset) + self._chip_offset
-
-        if self.is_2D:
-            return np.append(self._rotation.as_matrix()[:2, :2].dot(
-                (stage_coordinate - self._stage_offset)[:2]) + self._chip_offset[:2], stage_coordinate[2])
-
-        return stage_coordinate
-
-    #
-    #   Helper
-    #
-
-    def _recalculate_rotation(self):
-        """
-        TODO
-        """
-        if self._chip_coordinates.size == 0 or self._stage_coordinates.size == 0:
-            return
-
-        # Replace z coordinate with zeros for 2d transformation
-        chip_coordinates = self._chip_coordinates if self.is_3D else np.append(
-            self._chip_coordinates[:, :2], np.zeros((len(self.pairings), 1)), axis=1)
-        stage_coordinates = self._stage_coordinates if self.is_3D else np.append(
-            self._stage_coordinates[:, :2], np.zeros((len(self.pairings), 1)), axis=1)
-
-        # Calculate mean for each set
-        self._chip_offset = chip_coordinates.mean(axis=0)
-        self._stage_offset = stage_coordinates.mean(axis=0)
-
-        # Create Rotation with centered vectors
-        self._rotation, self._rmsd = Rotation.align_vectors(
-            (chip_coordinates - self._chip_offset),
-            (stage_coordinates - self._stage_offset))
-
-        self._ref_matrix = rmsd.kabsch(
-            (chip_coordinates - self._chip_offset),
-            (stage_coordinates - self._stage_offset))
+        return self._rotation.apply(
+            stage_coordinate - self._stage_offset) + self._chip_offset        
