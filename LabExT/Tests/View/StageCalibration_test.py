@@ -20,7 +20,7 @@ from LabExT.Movement.MoverNew import MoverNew
 from LabExT.Movement.Stages.DummyStage import DummyStage
 from LabExT.Movement.Stage import Stage
 
-from LabExT.View.StageCalibration.StageCalibrationController import StageCalibrationController
+from LabExT.View.MovementCalibration.MovementCalibrationController import StageCalibrationController
 
 
 class StageCalibrationControllerTest(unittest.TestCase):

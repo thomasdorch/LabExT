@@ -5,11 +5,16 @@ LabExT  Copyright (C) 2022  ETH Zurich and Polariton Technologies AG
 This program is free software and comes with ABSOLUTELY NO WARRANTY; for details see LICENSE file.
 """
 
-from LabExT.Movement.Transformations import make_3d_coordinate
+from contextlib import contextmanager
+from io import UnsupportedOperation
+from shutil import move
+
+from LabExT.Movement.Transformations import ChipCoordinate
 from bidict import bidict, ValueDuplicationError, KeyDuplicationError, OnDup, RAISE
 from typing import Type, List
 from functools import wraps
 
+from LabExT.Wafer.Device import Device
 from LabExT.Movement.Stage import Stage
 from LabExT.Movement.Calibration import Calibration, DevicePort, DevicePort, Orientation, State
 
@@ -56,6 +61,8 @@ class MoverNew:
 
     DEFAULT_Z_LIFT = 20.0
 
+    MIN_FIBER_DISTANCE = 1.1 * 125.0
+
     def __init__(self, experiment_manager):
         """Constructor.
 
@@ -92,12 +99,11 @@ class MoverNew:
         self._acceleration_xy = None
         self._z_lift = self.DEFAULT_SPEED_Z
 
-    def reset_calibrations(self):
+    def reset_calibrations(self) -> bool:
         """
         Resets state for each calibration
         """
-        for calibration in self.calibrations.values():
-            calibration.reset()
+        return all(c.reset() for c in self.calibrations.values())
 
     #
     #   Reload properties
@@ -114,6 +120,13 @@ class MoverNew:
         Loads all Stage classes.
         """
         self._stage_classes = Stage.find_stage_classes()
+
+    def reload_calibration_states(self):
+        """
+        Forces each calibration to recalculate the current state.
+        """
+        for calibration in self.calibrations.values():
+            calibration.determine_state()
 
     #
     #   Properties
@@ -186,27 +199,27 @@ class MoverNew:
         return len(self.connected_stages) > 0
 
     @property
-    def left_calibration(self): return self._get_calibration(
+    def left_calibration(self) -> Type[Calibration]: return self._get_calibration(
         orientation=Orientation.LEFT)
 
     @property
-    def right_calibration(self): return self._get_calibration(
+    def right_calibration(self) -> Type[Calibration]: return self._get_calibration(
         orientation=Orientation.RIGHT)
 
     @property
-    def top_calibration(self): return self._get_calibration(
+    def top_calibration(self) -> Type[Calibration]: return self._get_calibration(
         orientation=Orientation.TOP)
 
     @property
-    def bottom_calibration(self): return self._get_calibration(
+    def bottom_calibration(self) -> Type[Calibration]: return self._get_calibration(
         orientation=Orientation.BOTTOM)
 
     @property
-    def input_calibration(self): return self._get_calibration(
+    def input_calibration(self) -> Type[Calibration]: return self._get_calibration(
         port=DevicePort.INPUT)
 
     @property
-    def output_calibration(self): return self._get_calibration(
+    def output_calibration(self) -> Type[Calibration]: return self._get_calibration(
         port=DevicePort.OUTPUT)
 
     #
@@ -404,59 +417,155 @@ class MoverNew:
             self.right_calibration.stage.move_absolute([args[2], args[3], 0])
 
     #
+    #
+    #
+
+    @contextmanager
+    def set_equal_coordinate_system(self, coordinate_system):
+        for calibration in self.calibrations.values():
+            calibration.current_coordinate_system = coordinate_system
+
+        yield
+
+        for calibration in self.calibrations.values():
+            calibration.current_coordinate_system = None
+
+    #
     #   Movement Methods
     #
 
     @assert_connected_stages
-    def move_absolute(self, left=[], right=[], min_fiber_distance=1.1 * 125.0):
-        x0l = self.left_calibration.position[0]
-        x0r = self.right_calibration.position[0]
-        x1l = left[0]
-        x1r = right[0]
+    def move_relative(
+        self,
+        left=ChipCoordinate(0,0,0),
+        right=ChipCoordinate(0,0,0),
+        top=None,
+        bottom=None):
+        
+        # TODO: IMPLEMENT ME
+        if top or bottom:
+            raise UnsupportedOperation("Top and Bottom stage movement is not supported yet!")
 
-        assert min_fiber_distance > 0.0, "Fiber distance must be greater than 0, otherwise half-planes of fibers overlap."
-        assert x0l < x0r - min_fiber_distance, "For this collision avoidance algorithm to work, the left stage must " \
-                                            "ALWAYS be left of the right stage. Starting points not far enough apart..."
-        assert x1l < x1r - min_fiber_distance, "For this collision avoidance algorithm to work, the left stage must " \
-                                            "ALWAYS be left of the right stage. Target points not far enough apart..."
+        with self.left_calibration.in_coordinate_system(ChipCoordinate):
+            with self.right_calibration.in_coordinate_system(ChipCoordinate):
+                left_position = self.left_calibration.position
+                right_position = self.right_calibration.position
 
-        delta_l = x1l - x0l  # delta movement of x coordinate of left stage
-        delta_r = x1r - x0r  # delta movement of x coordinate of right stage
-        # case handling, depending on the half-plane's relative move
-        # noinspection PyChainedComparisons
-        if delta_l < 0 and delta_r < 0:
-            # obv. left moves first
-            #  1. move left stage from start to target
-            #  2. move right stage from start to target
-            self.left_calibration.move_absolute(left)
-            self.right_calibration.move_absolute(right)
-        elif delta_l < 0 and delta_r >= 0:
-            # doesnt matter which one moves first as both move avay from each other
-            #  1. move left stage from start to target
-            #  2. move right stage from start to target
-            self.left_calibration.move_absolute(left)
-            self.right_calibration.move_absolute(right)
-        elif delta_l >= 0 and delta_r < 0:
-            # this can lead to collisions, but since end coordinates are also far enough apart, we are good to go
-            #  1. move right stage from start to target
-            #  2. move left stage from start to target
-            self.right_calibration.move_absolute(right)
-            self.left_calibration.move_absolute(left)
-        elif delta_l >= 0 and delta_r >= 0:
-            # obv. right moves first
-            #  1. move right stage from start to target
-            #  2. move left stage from start to target
-            self.right_calibration.move_absolute(right)
-            self.left_calibration.move_absolute(left)
-        else:
-            raise AssertionError('Coder did not do proper case distinction for positive-ness of two variables!')
+                assert left_position.x < right_position.x - self.MIN_FIBER_DISTANCE, "For this collision avoidance algorithm to work, the left stage must " \
+                                                "ALWAYS be left of the right stage. Starting points not far enough apart..."
+                assert left_position.x + left.x < right_position.x  + right.x - self.MIN_FIBER_DISTANCE, "For this collision avoidance algorithm to work, the left stage must " \
+                                                    "ALWAYS be left of the right stage. Target points not far enough apart..."
+
+                # case handling, depending on the half-plane's relative move
+                # noinspection PyChainedComparisons
+                if left.x < 0 and right.x < 0:
+                    # obv. left moves first
+                    #  1. move left stage from start to target
+                    #  2. move right stage from start to target
+                    self.left_calibration.move_relative(left)
+                    self.right_calibration.move_relative(right)
+                elif left.x < 0 and right.x >= 0:
+                    # doesnt matter which one moves first as both move avay from each other
+                    #  1. move left stage from start to target
+                    #  2. move right stage from start to target
+                    self.left_calibration.move_relative(left)
+                    self.right_calibration.move_relative(right)
+                elif left.x >= 0 and right.x < 0:
+                    # this can lead to collisions, but since end coordinates are also far enough apart, we are good to go
+                    #  1. move right stage from start to target
+                    #  2. move left stage from start to target
+                    self.right_calibration.move_relative(right)
+                    self.left_calibration.move_relative(left)
+                elif left.x >= 0 and right.x >= 0:
+                    # obv. right moves first
+                    #  1. move right stage from start to target
+                    #  2. move left stage from start to target
+                    self.right_calibration.move_relative(right)
+                    self.left_calibration.move_relative(left)
+                else:
+                    raise AssertionError('Coder did not do proper case distinction for positive-ness of two variables!')
 
 
     @assert_connected_stages
-    def move_relative(self, left=[], right=[]):
-        self.move_absolute(
-            left=make_3d_coordinate(self.left_calibration.position) + make_3d_coordinate(left),
-            right=make_3d_coordinate(self.left_calibration.position) + make_3d_coordinate(right))
+    def move_absolute(self, movement: dict):
+
+        # TODO: IMPLEMENT ME
+        if Orientation.TOP in movement.keys() or Orientation.BOTTOM in movement.keys():
+            raise UnsupportedOperation("Top and Bottom stage movement is not supported yet!")
+
+        with self.set_equal_coordinate_system(ChipCoordinate):
+            left = movement.get(Orientation.LEFT)
+            right = movement.get(Orientation.RIGHT)
+
+            left_position = self.left_calibration.position
+            right_position = self.right_calibration.position
+
+            x0l = left_position.x
+            x0r = right_position.x
+
+            assert x0l < x0r - self.MIN_FIBER_DISTANCE, "For this collision avoidance algorithm to work, the left stage must " \
+                                        "ALWAYS be left of the right stage. Starting points not far enough apart..."
+
+            if left and not right:
+                self.left_calibration.move_absolute(left)
+            elif right and not left:
+                self.right_calibration.move_absolute(right)
+            elif right and left:
+                x1l = left.x
+                x1r = right.x
+
+                assert x1l < x1r - self.MIN_FIBER_DISTANCE, "For this collision avoidance algorithm to work, the left stage must " \
+                                        "ALWAYS be left of the right stage. Target points not far enough apart..."
+
+                delta_l = x1l - x0l  # delta movement of x coordinate of left stage
+                delta_r = x1r - x0r  # delta movement of x coordinate of right stage
+                # case handling, depending on the half-plane's relative move
+                # noinspection PyChainedComparisons
+                if delta_l < 0 and delta_r < 0:
+                    # obv. left moves first
+                    #  1. move left stage from start to target
+                    #  2. move right stage from start to target
+                    self.left_calibration.move_absolute(left)
+                    self.right_calibration.move_absolute(right)
+                elif delta_l < 0 and delta_r >= 0:
+                    # doesnt matter which one moves first as both move avay from each other
+                    #  1. move left stage from start to target
+                    #  2. move right stage from start to target
+                    self.left_calibration.move_absolute(left)
+                    self.right_calibration.move_absolute(right)
+                elif delta_l >= 0 and delta_r < 0:
+                    # this can lead to collisions, but since end coordinates are also far enough apart, we are good to go
+                    #  1. move right stage from start to target
+                    #  2. move left stage from start to target
+                    self.right_calibration.move_absolute(right)
+                    self.left_calibration.move_absolute(left)
+                elif delta_l >= 0 and delta_r >= 0:
+                    # obv. right moves first
+                    #  1. move right stage from start to target
+                    #  2. move left stage from start to target
+                    self.right_calibration.move_absolute(right)
+                    self.left_calibration.move_absolute(left)
+                else:
+                    raise AssertionError('Coder did not do proper case distinction for positive-ness of two variables!')
+
+    @property
+    def can_move_to_device(self):
+        return self.state == State.SINGLE_POINT_FIXED or self.state == State.FULLY_CALIBRATED
+
+    @assert_connected_stages
+    def move_to_device(self, device: Type[Device]):
+        self.lift_stages()
+
+        movement_vector = {}
+        if self.input_calibration:
+            movement_vector[self.input_calibration.orientation] = ChipCoordinate.from_list(device._in_position + [self._z_lift])
+        
+        if self.output_calibration:
+            movement_vector[self.output_calibration.orientation] = ChipCoordinate.from_list(device._out_position + [self._z_lift])
+
+        self.move_absolute(movement_vector)
+
+        self.lower_stages()
 
 
     @assert_connected_stages
@@ -464,8 +573,9 @@ class MoverNew:
         if self._stages_lifted:
             return
 
-        for calibration in self.calibrations.values():
-            calibration.move_relative([0,0,self.z_lift])
+        with self.set_equal_coordinate_system(ChipCoordinate):
+            for calibration in self.calibrations.values():
+                calibration.move_relative(ChipCoordinate(0,0,self.z_lift))
 
         self._stages_lifted = True
 
@@ -474,30 +584,11 @@ class MoverNew:
         if not self._stages_lifted:
             return
 
-        for calibration in self.calibrations.values():
-            calibration.move_relative([0,0,-self.z_lift])
+        with self.set_equal_coordinate_system(ChipCoordinate):
+            for calibration in self.calibrations.values():
+                calibration.move_relative(ChipCoordinate(0,0,-self.z_lift))
 
         self._stages_lifted = False
-
-    @assert_connected_stages
-    def move_to_device(self, device):
-        """Moves to a specific device on the chip.
-
-        Parameters
-        ----------
-        device : Device
-            Device to move to.
-
-        Raises
-        ------
-        RuntimeError
-            If no 2D transformation has been done beforehand.
-        """
-        self.lift_stages()
-
-        self.move_absolute(left=device._in_position, right=device._out_position)
-
-        self.lower_stages()
 
 
     #

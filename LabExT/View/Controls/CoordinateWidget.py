@@ -6,7 +6,9 @@ This program is free software and comes with ABSOLUTELY NO WARRANTY; for details
 """
 
 from tkinter import LEFT, SUNKEN, Frame, Label
-from LabExT.Movement.Calibration import Axis
+from typing import Type
+from LabExT.Movement.Calibration import Calibration
+from LabExT.Movement.Transformations import Coordinate, Axis, StageCoordinate
 
 
 class CoordinateWidget(Frame):
@@ -14,17 +16,20 @@ class CoordinateWidget(Frame):
     Simple Widget to display a coordinate
     """
 
-    def __init__(self, parent, coordinate):
+    def __init__(self, parent, coordinate: Type[Coordinate]):
         super(CoordinateWidget, self).__init__(parent)
-        self._coordinate = coordinate[:3]  # Use only first 3 values
-
+        self._coordinate = coordinate
         self.__setup__()
 
     def __setup__(self):
-        for idx, value in enumerate(self._coordinate):
-            Label(self, text="{}:".format(Axis(idx).name)).pack(side=LEFT)
+        coordinate_list = self._coordinate.to_list()
+        for axis in Axis:
+            Label(self, text="{}:".format(axis.name)).pack(side=LEFT)
             Label(
-                self, text=value, borderwidth=1, relief=SUNKEN
+                self,
+                text="{:.2f}".format(coordinate_list[axis.value]),
+                borderwidth=1,
+                relief=SUNKEN
             ).pack(side=LEFT, ipadx=5, padx=(0, 5))
 
     @property
@@ -36,8 +41,43 @@ class CoordinateWidget(Frame):
         """
         Rerenders the the frame to display
         """
-        self._coordinate = coordinate[:3]
+        self._coordinate = coordinate
 
         for c in self.winfo_children():
             c.forget()
         self.__setup__()
+
+class StagePositionWidget(CoordinateWidget):
+    """
+    Widget, which display the current position of a stage. Updates automatically.
+    """
+
+    REFRESHING_RATE = 1000  # [ms]
+
+    def __init__(self, parent, calibration: Type[Calibration]):
+        self.calibration = calibration
+
+        with self.calibration.in_coordinate_system(StageCoordinate):
+            super().__init__(parent, self.calibration.position)
+
+        self._update_pos_job = self.after(
+            self.REFRESHING_RATE, self._refresh_position)
+
+    def __del__(self):
+        if self._update_pos_job:
+            self.after_cancel(self._update_pos_job)
+
+    def _refresh_position(self):
+        """
+        Refreshes Stage Position.
+
+        Kills update job, if an error occurred.
+        """
+        try:
+            with self.calibration.in_coordinate_system(StageCoordinate):
+                self.coordinate = self.calibration.position
+        except Exception as exc:
+            self.after_cancel(self._update_pos_job)
+            raise RuntimeError(exc)
+
+        self.after(self.REFRESHING_RATE, self._refresh_position)

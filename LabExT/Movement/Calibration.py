@@ -5,14 +5,15 @@ LabExT  Copyright (C) 2022  ETH Zurich and Polariton Technologies AG
 This program is free software and comes with ABSOLUTELY NO WARRANTY; for details see LICENSE file.
 """
 
+from contextlib import contextmanager
 from functools import wraps
 import time
 import numpy as np
-from typing import Type
+from typing import Dict, Type
 from enum import Enum, auto
 
-from LabExT.Movement.Transformations import KabschRotation, SinglePointFixation, make_3d_coordinate
-from LabExT.Movement.Stage import StageError
+from LabExT.Movement.Transformations import AxesRotation, Axis, ChipCoordinate, Coordinate, CoordinatePairing, KabschRotation, SinglePointTransformation, StageCoordinate, Transformation
+from LabExT.Movement.Stage import Stage, StageError
 
 
 class CalibrationError(RuntimeError):
@@ -41,27 +42,6 @@ class DevicePort(Enum):
         return self.name.capitalize()
 
 
-class Axis(Enum):
-    """Enumerate different channels. Each channel represents one axis."""
-    X = 0
-    Y = 1
-    Z = 2
-
-    def __str__(self) -> str:
-        return "{}-Axis".format(self.name)
-
-
-class Direction(Enum):
-    """
-    Enumerate different axis directions.
-    """
-    POSITIVE = 1
-    NEGATIVE = -1
-
-    def __str__(self) -> str:
-        return self.name.capitalize()
-
-
 class State(Enum):
     """
     Enumerate different calibration states.
@@ -83,79 +63,30 @@ class State(Enum):
     def __str__(self) -> str:
         return self.name.replace('_', ' ').capitalize()
 
-
-def assert_minimum_calibration_state(state: State):
+def assert_min_state_by_coordinate_system(constraints: Dict[Type[Coordinate], State]):
     """
-    Use this decorator to assert that the calibration has at least a certain state.
+    Use this decorator to assert that the calibration has at least a certain state for a given cooridnate system.
     """
     def assert_state(func):
         @wraps(func)
         def wrapper(calibration, *args, **kwargs):
-            if(calibration.state < state):
+            if calibration.current_coordinate_system is None:
                 raise CalibrationError(
-                    "Function {} needs at least a calibration state of {}".format(
-                        func.__name__, state))
+                    "Function {} needs a cooridnate system to operate in. Please use the context to set the system.".format(
+                        func.__name__))
+
+            asserted_state =  constraints.get(calibration.current_coordinate_system)
+            if not asserted_state:
+                raise ValueError("Unsupported coordinate system: {}".format(calibration.current_coordinate_system))
+
+            if calibration.state < asserted_state:
+                raise CalibrationError(
+                    "Function {} needs at least a calibration state of {} to operate in coordinate system {}".format(
+                        func.__name__, asserted_state, calibration.current_coordinate_system))
 
             return func(calibration, *args, **kwargs)
         return wrapper
     return assert_state
-
-class AxesRotation:
-    """
-    Assigns a stage axis (X,Y,Z) to the positive chip axes (X,Y,Z) with associated direction.
-    If the assignment is well defined, a rotation matrix is calculated, which rotates the given chip coordinate perpendicular to the stage coordinate.
-    The rotation matrix (3x3) is therefore a signed permutation matrix of the coordinate axes of the chip.
-
-    Each row of the matrix represents a chip axis. Each column of the matrix represents a stage axis.
-    """
-
-    def __init__(self) -> None:
-        self._n = len(Axis)
-        self._matrix = np.identity(len(Axis))  # 3x3 identity matrix
-
-    def update(self, chip_axis: Axis, stage_axis: Axis, direction: Direction):
-        """
-        Updates the axes rotation matrix.
-        Replaces the column vector of given chip with signed (direction) i-th unit vector (i is stage)
-        """
-        if not (isinstance(chip_axis, Axis) and isinstance(stage_axis, Axis)):
-            raise ValueError("Unknown axes given for calibration.")
-
-        if not isinstance(direction, Direction):
-            raise ValueError("Unknown direction given for calibration.")
-
-        # Replacing column of chip with signed (direction) i-th unit vector (i
-        # is stage)
-        self._matrix[:, chip_axis.value] = np.eye(
-            1, 3, stage_axis.value) * direction.value
-
-    @property
-    def is_valid(self):
-        """
-        Checks if given matrix is a permutation matrix.
-
-        A matrix is a permutation matrix if the sum of each row and column is exactly 1.
-        """
-        abs_matrix = np.absolute(self._matrix)
-        return (
-            abs_matrix.sum(
-                axis=0) == 1).all() and (
-            abs_matrix.sum(
-                axis=1) == 1).all()
-
-    def chip_to_stage(self, chip_relative_difference):
-        """
-        Rotates the chip difference (x,y,z) according to the axes calibration.
-        Use this method for relative movement in the coordinate system of a chip.
-
-        Raises CalibrationError error if matrix is not valid.
-        """
-        if not self.is_valid:
-            raise CalibrationError(
-                "The current axis assignment does not define a valid 90 degree rotation. ")
-
-        return self._matrix.dot(make_3d_coordinate(chip_relative_difference))
-
 
 class Calibration:
     """
@@ -164,15 +95,17 @@ class Calibration:
 
     def __init__(self, mover, stage, orientation, device_port) -> None:
         self.mover = mover
-        self.stage = stage
+        self.stage: Type[Stage] = stage
 
         self._state = State.CONNECTED if stage.connected else State.UNINITIALIZED
         self._orientation = orientation
         self._device_port = device_port
 
-        self._axes_rotation: Type[AxesRotation] = None
-        self._single_point_fixation: Type[SinglePointFixation] = None
-        self._full_calibration: Type[KabschRotation] = None
+        self._axes_rotation: Type[AxesRotation] = AxesRotation()
+        self._single_point_transformation: Type[Transformation] = SinglePointTransformation(self._axes_rotation)
+        self._full_transformation: Type[Transformation] = KabschRotation()
+
+        self.current_coordinate_system: Type[Coordinate] = None
 
     #
     #   Representation
@@ -185,6 +118,62 @@ class Calibration:
     def short_str(self) -> str:
         return "{} Stage ({})".format(
             str(self.orientation), str(self._device_port))
+
+    #
+    #   Context to set current coordinate system
+    #
+
+    @contextmanager
+    def in_coordinate_system(self, coordinate_system: Type[Coordinate]):
+        self.current_coordinate_system = coordinate_system
+        try:
+            yield
+        finally:
+            self.current_coordinate_system = None
+
+    #
+    #   
+    #
+
+
+    def connect_to_stage(self):
+        """
+        Opens a connections to the stage.
+        """
+        self.stage.connect()
+        self.determine_state()
+
+    def disconnect_from_stage(self):
+        """
+        Closes connections to the stage.
+        """
+        self.stage.disconnect()
+        self.determine_state()
+
+
+    @property
+    def axes_rotation(self):
+        return self._axes_rotation
+
+    def update_axes_rotation(self, chip_axis, direction, stage_axis):
+        self._axes_rotation.update(chip_axis, direction, stage_axis)
+        self.determine_state(skip_connection=True)
+
+    @property
+    def single_point_transformation(self):
+        return self._single_point_transformation
+
+    def update_single_point_transformation(self, pairing: Type[CoordinatePairing]):
+        self._single_point_transformation.update(pairing)
+        self.determine_state(skip_connection=True)
+
+    @property
+    def full_transformation(self):
+        return self._full_transformation
+
+    def update_full_transformation(self, pairing: Type[CoordinatePairing]):
+        self._full_transformation.update(pairing)
+        self.determine_state(skip_connection=True)
 
     #
     #   Properties
@@ -218,54 +207,6 @@ class Calibration:
         """
         return self._device_port == DevicePort.OUTPUT
 
-    @property
-    def can_move_absolute(self):
-        return self._state == State.SINGLE_POINT_FIXED or self._state == State.FULLY_CALIBRATED
-
-    #
-    #   Sanity check
-    #
-
-    def sanity_check(self) -> State:
-        """
-        Calculates the status of the calibration independently of the status variables of the instance.
-        1. Checks whether the stage responds. If yes, status is at least CONNECTED.      
-        2. Checks if axis rotation is valid. If Yes, status is at least COORDINATE SYSTEM FIXED.
-        3. Checks if single point fixation is valid. If Yes, status is at least SINGLE POINT FIXED.
-        4. Checks if full calibration is valid. If Yes, status is FULLY CALIBRATED.
-        """
-        status = State.UNINITIALIZED
-
-        # 1. Check if stage responds
-        try:
-            if self.stage is None or self.stage.get_status() is None:
-                return status
-            status = State.CONNECTED
-        except StageError:
-            return status
-
-        assert status == State.CONNECTED
-
-        # 2. Check if axis rotation is valid
-        if self._axes_rotation is None or not self._axes_rotation.is_valid:
-            return status
-        status = State.COORDINATE_SYSTEM_FIXED
-
-        assert status == State.COORDINATE_SYSTEM_FIXED
-
-        # 3. Check if single point fixation is valid
-        if self._single_point_fixation is None or not self._single_point_fixation.is_valid:
-            return status
-        status = State.SINGLE_POINT_FIXED
-
-        assert status == State.SINGLE_POINT_FIXED
-
-        # 4. Check if Full Calibration is valid
-        if self._full_calibration is None or not self._full_calibration.is_valid:
-            return status
-
-        return State.FULLY_CALIBRATED
-
     #
     #   Calibration Setup Methods
     #
@@ -275,134 +216,143 @@ class Calibration:
         Resets calibration by removing
         axes rotation, single point fixation and full calibration.
         """
-        self._axes_rotation = None
-        self._single_point_fixation = None
-        self._full_calibration = None
+        self.axes_rotation.reset()
+        self.single_point_transformation.reset()
+        self.full_transformation.reset()
         self._state = State.CONNECTED if self.stage.connected else State.UNINITIALIZED
 
         return True
 
-    def connect_to_stage(self) -> bool:
+    def determine_state(self, skip_connection = False):
         """
-        Opens a connections to the stage.
+        Determines the status of the calibration independently of the status variables of the instance.
+        1. Checks whether the stage responds. If yes, status is at least CONNECTED.      
+        2. Checks if axis rotation is valid. If Yes, status is at least COORDINATE SYSTEM FIXED.
+        3. Checks if single point fixation is valid. If Yes, status is at least SINGLE POINT FIXED.
+        4. Checks if full calibration is valid. If Yes, status is FULLY CALIBRATED.
         """
-        try:
-            if self.stage.connect():
+        # Reset state
+        self._state = State.UNINITIALIZED
+
+        # 1. Check if stage responds
+        if not skip_connection:
+            try:
+                if self.stage is None or self.stage.get_status() is None:
+                    return
                 self._state = State.CONNECTED
-                return True
-        except StageError as e:
-            self._state = State.UNINITIALIZED
-            raise e
+            except StageError:
+                return
+        else:
+            self._state = State.CONNECTED
 
-        return False
+        assert self._state == State.CONNECTED
 
-    def fix_coordinate_system(self, axes_rotation: Type[AxesRotation]) -> bool:
-        """
-        Fixes coordinate system by providing a valid axes rotation matrix.
-        """
-        if not axes_rotation.is_valid:
-            raise CalibrationError(
-                "The given axis assignment does not define a valid 90 degree rotation. ")
-
-        self._axes_rotation = axes_rotation
+        # 2. Check if axis rotation is valid
+        if self.axes_rotation is None or not self.axes_rotation.is_valid:
+            return
         self._state = State.COORDINATE_SYSTEM_FIXED
 
-        return True
+        assert self._state == State.COORDINATE_SYSTEM_FIXED
 
-    def fix_single_point(
-            self,
-            single_point_fixation: Type[SinglePointFixation]) -> bool:
-        """
-        Fixes a single point by providing a valid single point fixation.
-        """
-        if not single_point_fixation.is_valid:
-            raise CalibrationError(
-                "The given fixation is no valid. ")
-
-        self._single_point_fixation = single_point_fixation
+        # 3. Check if single point fixation is valid
+        if self.single_point_transformation is None or not self.single_point_transformation.is_valid:
+            return
         self._state = State.SINGLE_POINT_FIXED
 
-        return True
+        assert self._state == State.SINGLE_POINT_FIXED
 
-    def calibrate_fully(self, kabsch_rotation: Type[KabschRotation]) -> bool:
-        """
-        Fully calibrate a stage by providing a rotation induced by the Kabsch algorithm.
-        """
-        if not kabsch_rotation.is_valid:
-            raise CalibrationError(
-                "The rotation is no valid. ")
+        # 4. Check if Full Calibration is valid
+        if self.full_transformation is None or not self.full_transformation.is_valid:
+            return
 
-        self._full_calibration = kabsch_rotation
         self._state = State.FULLY_CALIBRATED
-
-        return True
 
     #
     #   Position Methods
     #
 
     @property
-    @assert_minimum_calibration_state(State.FULLY_CALIBRATED)
-    def position(self):
+    @assert_min_state_by_coordinate_system({
+        StageCoordinate: State.CONNECTED,
+        ChipCoordinate: State.SINGLE_POINT_FIXED
+    })
+    def position(self) -> Type[Coordinate]:
         """
-        Returns the current position of the stage in chip coordinates
+        Returns the current positions of the stage in the specified system.
         """
-        return self._full_calibration.stage_to_chip(self.stage.position)
+        # Return position in stage coordinate.
+        if self.current_coordinate_system == StageCoordinate:
+            return StageCoordinate.from_list(self.stage.position)
 
+        # Return position in chip coordinate.
+        if self.current_coordinate_system == ChipCoordinate:
+            if self.state == State.FULLY_CALIBRATED:
+                return self.full_transformation.stage_to_chip(
+                    StageCoordinate.from_list(self.stage.position))
+            elif self.state == State.SINGLE_POINT_FIXED:
+                return self.single_point_transformation.stage_to_chip(
+                    StageCoordinate.from_list(self.stage.position))
 
     #
-    #   Movement Methods
+    #   Movement methods
     #
 
-    @assert_minimum_calibration_state(State.COORDINATE_SYSTEM_FIXED)
-    def move_relative(self, chip_relative_difference):
+    @assert_min_state_by_coordinate_system({
+        StageCoordinate: State.CONNECTED,
+        ChipCoordinate: State.COORDINATE_SYSTEM_FIXED
+    })
+    def move_relative(self, relative_difference: Type[Coordinate]):
         """
-        Moves the stage relative to the chip coordinate system.
-        Takes a vector [x,y,z] in chip coordinate system, transforms it into a vector [x',y',z']
-        relative to the stage coordinate system and executes the movement.
+        Moves the stage relative to the specified coordinate system.
         """
-        stage_relative_difference = self._axes_rotation.chip_to_stage(chip_relative_difference)
+        # Move stage relative in stage coordinates
+        if self.current_coordinate_system == StageCoordinate:
+            assert type(relative_difference) in (Coordinate, StageCoordinate), "Use pass a stage coordinate to move the stage relative in stage coordinates."
+            stage_relative_difference = relative_difference
+        # Move stage relative in chip cooridnates
+        elif self.current_coordinate_system == ChipCoordinate:
+            assert type(relative_difference) in (Coordinate, ChipCoordinate), "Use pass a chip coordinate to move the stage relative in chip coordinates."
+            stage_relative_difference = self.axes_rotation.rotate_chip_to_stage(relative_difference)
+
         self.stage.move_relative(
-            x=stage_relative_difference[0],
-            y=stage_relative_difference[1],
-            z=stage_relative_difference[2] 
+            x=stage_relative_difference.x,
+            y=stage_relative_difference.y,
+            z=stage_relative_difference.z 
         )
 
-    @assert_minimum_calibration_state(State.SINGLE_POINT_FIXED)
-    def move_absolute_approximated(self, chip_absolute_cooridnate, z_lift=0):
+    @assert_min_state_by_coordinate_system({
+        StageCoordinate: State.CONNECTED,
+        ChipCoordinate: State.SINGLE_POINT_FIXED
+    })
+    def move_absolute(self, coordinate: Type[Coordinate]):
         """
-        Moves the stage approximated absolute in the chip cooridnate system when using single-point fixation.
+        Moves the stage absolute in the specified cooridnate system.
         """
-        if z_lift > 0:
-            self.stage.move_relative([0,0,z_lift])
+        # Move stage absolute in stage cooridnates
+        if self.current_coordinate_system == StageCoordinate:
+            assert type(coordinate) in (Coordinate, StageCoordinate), "Use pass a stage coordinate to move the stage absolute in stage coordinates."
+            stage_coordinate = coordinate
+        elif self.current_coordinate_system == ChipCoordinate:
+            assert type(coordinate) in (Coordinate, ChipCoordinate), "Use pass a chip coordinate to move the stage absolute in chip coordinates."
+            if self.state == State.FULLY_CALIBRATED:
+                stage_coordinate = self.full_transformation.chip_to_stage(coordinate)
+            elif self.state == State.SINGLE_POINT_FIXED:
+                stage_coordinate == self.single_point_transformation.chip_to_stage(coordinate)
 
-        self.stage.move_absolute(self._single_point_fixation.chip_to_stage(chip_absolute_cooridnate))
+        self.stage.move_absolute(
+            x=stage_coordinate.x,
+            y=stage_coordinate.y,
+            z=stage_coordinate.z
+        )
 
-        if z_lift > 0:
-            self.stage.move_relative([0,0,-z_lift])
-
-    @assert_minimum_calibration_state(State.FULLY_CALIBRATED)
-    def move_absolute(self, chip_absolute_cooridnate):
-        """
-        Moves the stage exactly absolute in the chip cooridnate system when applying full calibration.
-        """
-        self.stage.move_absolute(self._full_calibration.chip_to_stage(chip_absolute_cooridnate))
-
-    @assert_minimum_calibration_state(State.CONNECTED)
     def wiggle_axis(
-            self,
-            axis: Axis,
-            axes_rotation: Type[AxesRotation],
-            wiggle_distance=1e3,
-            wiggle_speed=1e3):
+        self,
+        wiggle_axis: Axis,
+        wiggle_distance=1e3,
+        wiggle_speed=1e3):
         """
         Wiggles the requested axis positioner in order to enable the user to test the correct direction and axis mapping.
         """
-        x_stage, y_stage, z_stage = axes_rotation.chip_to_stage(np.array([
-            wiggle_distance if axis == Axis.X else 0,
-            wiggle_distance if axis == Axis.Y else 0,
-            wiggle_distance if axis == Axis.Z else 0
-        ]))
 
         current_speed_xy = self.stage.get_speed_xy()
         current_speed_z = self.stage.get_speed_z()
@@ -410,9 +360,11 @@ class Calibration:
         self.stage.set_speed_xy(wiggle_speed)
         self.stage.set_speed_z(wiggle_speed)
 
-        self.stage.move_relative(x_stage, y_stage, z_stage)
-        time.sleep(2)
-        self.stage.move_relative(-x_stage, -y_stage, -z_stage)
+        wiggle_difference = np.array([wiggle_distance if wiggle_axis == axis else 0 for axis in Axis])
+        with self.in_coordinate_system(ChipCoordinate):
+            self.move_relative(ChipCoordinate.from_array(wiggle_difference))
+            time.sleep(2)
+            self.move_relative(ChipCoordinate.from_array(-wiggle_difference))
 
         self.stage.set_speed_xy(current_speed_xy)
         self.stage.set_speed_z(current_speed_z)

@@ -26,7 +26,7 @@ from LabExT.View.MoveDeviceWindow import MoveDeviceWindow
 from LabExT.View.MovementWizard.MovementWizardController import MovementWizardController
 from LabExT.View.ProgressBar.ProgressBar import ProgressBar
 from LabExT.View.SearchForPeakPlotsWindow import SearchForPeakPlotsWindow
-from LabExT.View.StageCalibration.StageCalibrationController import StageCalibrationController
+from LabExT.View.MovementCalibration.MovementCalibrationController import MovementCalibrationController
 from LabExT.View.StageDriverSettingsDialog import StageDriverSettingsDialog
 
 
@@ -207,7 +207,7 @@ class MListener:
         if try_to_lift_window(self.calibraton_wizard_toplevel):
             return
 
-        calibraton_wizard = StageCalibrationController(
+        calibraton_wizard = MovementCalibrationController(
                 self._experiment_manager, self._experiment_manager.mover_new, parent=self._root)
         self.calibraton_wizard_toplevel = calibraton_wizard.view
 

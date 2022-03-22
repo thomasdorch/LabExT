@@ -10,12 +10,11 @@ import logging
 import os.path
 import re
 import threading
-from typing import Type
 import pkg_resources
 from os import makedirs
 from os.path import join, dirname, abspath, exists, basename
 from pathlib import Path
-from tkinter import Entry, TclError, Toplevel, ttk, Label
+from tkinter import TclError, Toplevel, messagebox, ttk, Label
 
 import unicodedata
 
@@ -278,3 +277,13 @@ def try_to_lift_window(window):
         return True
     except TclError:
         return False
+
+
+def catch_and_prompt_error(function, parent=None):
+    try:
+        return function()
+    except Exception as e:
+        messagebox.showerror(
+            "Error",
+            "Could not perform operation correctly: {}".format(e),
+            parent=parent)

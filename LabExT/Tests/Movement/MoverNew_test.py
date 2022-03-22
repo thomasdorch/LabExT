@@ -14,10 +14,7 @@ from LabExT.Movement.MoverNew import MoverError, MoverNew, Stage, assert_connect
 from LabExT.Tests.Utils import with_stage_discovery_patch
 
 
-class AssertConnectedStagesTest(unittest.TestCase):
-    """
-    Tests decorator for assert_connected_stages.
-    """
+class FooTest(unittest.TestCase):
 
     def setUp(self) -> None:
         self.stage = DummyStage('usb:123456789')
@@ -26,302 +23,323 @@ class AssertConnectedStagesTest(unittest.TestCase):
             with patch.object(Stage, "find_stage_classes", return_value=[]):
                 self.mover = MoverNew(None)
 
-        return super().setUp()
-
-    def test_assert_connected_stages_raises_error_if_no_stage_is_connected(
-            self):
-        self.mover.add_stage_calibration(
-            self.stage, Orientation.LEFT, DevicePort.INPUT)
-
-        func = Mock()
-        func.__name__ = 'Dummy Function'
-
-        with self.assertRaises(MoverError):
-            assert_connected_stages(func)(self.mover)
-
-        func.assert_not_called()
-
-    def test_assert_connected_stages_calls_function_if_stage_is_connected(
-            self):
-        self.mover.add_stage_calibration(
-            self.stage, Orientation.LEFT, DevicePort.INPUT)
-        self.stage.connect()
-
-        func = Mock()
-        func.__name__ = 'Dummy Function'
-
-        assert_connected_stages(func)(self.mover)
-        func.assert_called_once()
-
-
-class AddStageCalibrationTest(unittest.TestCase):
-    """
-    Tests adding new calibrations.
-    """
-
-    def setUp(self) -> None:
-        self.stage = DummyStage('usb:123456789')
-        self.stage2 = DummyStage('usb:9887654321')
-
-        with patch.object(Stage, "find_available_stages", return_value=[]):
-            with patch.object(Stage, "find_stage_classes", return_value=[]):
-                self.mover = MoverNew(None)
+        self.calibration = self.mover.add_stage_calibration(self.stage, Orientation.LEFT, DevicePort.INPUT)
+        self.calibration.connect_to_stage()
 
         return super().setUp()
 
-    def test_add_stage_calibration_reject_invalid_orientations(self):
-        current_calibrations = self.mover.calibrations
+    def test_foo(self):
 
-        with self.assertRaises(ValueError):
-            self.mover.add_stage_calibration(
-                self.stage, 1, DevicePort.INPUT)
+        self.mover.lift_stages()
 
-        self.assertEqual(current_calibrations, self.mover.calibrations)
+# class AssertConnectedStagesTest(unittest.TestCase):
+#     """
+#     Tests decorator for assert_connected_stages.
+#     """
 
-    def test_add_stage_calibration_reject_invalid_port(self):
-        current_calibrations = self.mover.calibrations
+#     def setUp(self) -> None:
+#         self.stage = DummyStage('usb:123456789')
 
-        with self.assertRaises(ValueError):
-            self.mover.add_stage_calibration(self.stage, Orientation.LEFT, 1)
+#         with patch.object(Stage, "find_available_stages", return_value=[]):
+#             with patch.object(Stage, "find_stage_classes", return_value=[]):
+#                 self.mover = MoverNew(None)
 
-        self.assertEqual(current_calibrations, self.mover.calibrations)
+#         return super().setUp()
 
-    def test_add_stage_calibration_reject_double_orientations(self):
-        valid_calibration = self.mover.add_stage_calibration(
-            self.stage, Orientation.LEFT, DevicePort.INPUT)
-        current_calibrations = self.mover.calibrations
+#     def test_assert_connected_stages_raises_error_if_no_stage_is_connected(
+#             self):
+#         self.mover.add_stage_calibration(
+#             self.stage, Orientation.LEFT, DevicePort.INPUT)
 
-        self.assertEqual(current_calibrations[(
-            Orientation.LEFT, DevicePort.INPUT)], valid_calibration)
+#         func = Mock()
+#         func.__name__ = 'Dummy Function'
 
-        with self.assertRaises(MoverError) as error_context:
-            self.mover.add_stage_calibration(
-                self.stage2, Orientation.LEFT, DevicePort.OUTPUT)
+#         with self.assertRaises(MoverError):
+#             assert_connected_stages(func)(self.mover)
 
-        with self.assertRaises(KeyError):
-            self.mover.calibrations[(Orientation.LEFT, DevicePort.OUTPUT)]
+#         func.assert_not_called()
 
-        self.assertEqual(
-            "A stage has already been assigned for Left.", str(
-                error_context.exception))
-        self.assertEqual(current_calibrations, self.mover.calibrations)
-        self.assertEqual(1, len(self.mover.calibrations))
+#     def test_assert_connected_stages_calls_function_if_stage_is_connected(
+#             self):
+#         self.mover.add_stage_calibration(
+#             self.stage, Orientation.LEFT, DevicePort.INPUT)
+#         self.stage.connect()
 
-    def test_add_stage_calibration_reject_double_ports(self):
-        valid_calibration = self.mover.add_stage_calibration(
-            self.stage, Orientation.LEFT, DevicePort.INPUT)
-        current_calibrations = self.mover.calibrations
+#         func = Mock()
+#         func.__name__ = 'Dummy Function'
 
-        self.assertEqual(current_calibrations[(
-            Orientation.LEFT, DevicePort.INPUT)], valid_calibration)
-
-        with self.assertRaises(MoverError) as error_context:
-            self.mover.add_stage_calibration(
-                self.stage2, Orientation.RIGHT, DevicePort.INPUT)
-
-        with self.assertRaises(KeyError):
-            self.mover.calibrations[(Orientation.RIGHT, DevicePort.INPUT)]
-
-        self.assertEqual(
-            "A stage has already been assigned for the Input port.", str(
-                error_context.exception))
-        self.assertEqual(current_calibrations, self.mover.calibrations)
-        self.assertEqual(1, len(self.mover.calibrations))
-
-    def test_add_stage_calibration_reject_double_stages(self):
-        valid_calibration = self.mover.add_stage_calibration(
-            self.stage, Orientation.LEFT, DevicePort.INPUT)
-        current_calibrations = self.mover.calibrations
-
-        self.assertEqual(current_calibrations[(
-            Orientation.LEFT, DevicePort.INPUT)], valid_calibration)
-
-        with self.assertRaises(MoverError) as error_context:
-            self.mover.add_stage_calibration(
-                self.stage, Orientation.TOP, DevicePort.OUTPUT)
-
-        self.assertEqual("Stage {} has already an assignment.".format(
-            str(self.stage)), str(error_context.exception))
-        self.assertEqual(current_calibrations, self.mover.calibrations)
-        self.assertEqual(1, len(self.mover.calibrations))
-
-    def test_active_stage_includes_new_stage(self):
-        self.mover.add_stage_calibration(
-            self.stage, Orientation.LEFT, DevicePort.INPUT)
-        self.mover.add_stage_calibration(
-            self.stage2, Orientation.RIGHT, DevicePort.OUTPUT)
-
-        self.assertIn(self.stage, self.mover.active_stages)
-        self.assertIn(self.stage2, self.mover.active_stages)
-
-    def test_left_and_input_calibration_property(self):
-        calibration = self.mover.add_stage_calibration(
-            self.stage, Orientation.LEFT, DevicePort.INPUT)
-        self.assertEqual(calibration, self.mover.left_calibration)
-        self.assertEqual(calibration, self.mover.input_calibration)
-
-    def test_right_and_output_calibration_property(self):
-        calibration = self.mover.add_stage_calibration(
-            self.stage, Orientation.RIGHT, DevicePort.OUTPUT)
-        self.assertEqual(calibration, self.mover.right_calibration)
-        self.assertEqual(calibration, self.mover.output_calibration)
-
-    def test_top_and_input_calibration_property(self):
-        calibration = self.mover.add_stage_calibration(
-            self.stage, Orientation.TOP, DevicePort.INPUT)
-        self.assertEqual(calibration, self.mover.top_calibration)
-        self.assertEqual(calibration, self.mover.input_calibration)
-
-    def test_bottom_and_output_calibration_property(self):
-        calibration = self.mover.add_stage_calibration(
-            self.stage, Orientation.BOTTOM, DevicePort.OUTPUT)
-        self.assertEqual(calibration, self.mover.bottom_calibration)
-        self.assertEqual(calibration, self.mover.output_calibration)
+#         assert_connected_stages(func)(self.mover)
+#         func.assert_called_once()
 
 
-class MoverStageSettingsTest(unittest.TestCase):
-    """
-    Tests stage settings.
-    """
+# class AddStageCalibrationTest(unittest.TestCase):
+#     """
+#     Tests adding new calibrations.
+#     """
 
-    def setUp(self) -> None:
-        self.stage = DummyStage('usb:123456789')
-        self.stage2 = DummyStage('usb:9887654321')
+#     def setUp(self) -> None:
+#         self.stage = DummyStage('usb:123456789')
+#         self.stage2 = DummyStage('usb:9887654321')
 
-        with patch.object(Stage, "find_available_stages", return_value=[]):
-            with patch.object(Stage, "find_stage_classes", return_value=[]):
-                self.mover = MoverNew(None)
+#         with patch.object(Stage, "find_available_stages", return_value=[]):
+#             with patch.object(Stage, "find_stage_classes", return_value=[]):
+#                 self.mover = MoverNew(None)
 
-        self.mover.add_stage_calibration(
-            self.stage, Orientation.LEFT, DevicePort.INPUT)
-        self.mover.add_stage_calibration(
-            self.stage2, Orientation.RIGHT, DevicePort.OUTPUT)
+#         return super().setUp()
 
-        self.stage.connect()
-        self.stage2.connect()
-        return super().setUp()
+#     def test_add_stage_calibration_reject_invalid_orientations(self):
+#         current_calibrations = self.mover.calibrations
 
-    def test_set_speed_xy_raises_error_if_lower_bound_is_violated(self):
-        with self.assertRaises(ValueError) as error:
-            self.mover.speed_xy = self.mover.SPEED_LOWER_BOUND - 1
+#         with self.assertRaises(ValueError):
+#             self.mover.add_stage_calibration(
+#                 self.stage, 1, DevicePort.INPUT)
 
-        self.assertEqual(
-            "Speed for xy is out of valid range.", str(
-                error.exception))
-        self.assertTrue(all(
-            s.get_speed_xy() == self.mover._speed_xy for s in self.mover.connected_stages))
+#         self.assertEqual(current_calibrations, self.mover.calibrations)
 
-    def test_set_speed_xy_raises_error_if_upper_bound_is_violated(self):
-        with self.assertRaises(ValueError) as error:
-            self.mover.speed_xy = self.mover.SPEED_UPPER_BOUND + 1
+#     def test_add_stage_calibration_reject_invalid_port(self):
+#         current_calibrations = self.mover.calibrations
 
-        self.assertEqual(
-            "Speed for xy is out of valid range.", str(
-                error.exception))
-        self.assertTrue(all(
-            s.get_speed_xy() == self.mover._speed_xy for s in self.mover.connected_stages))
+#         with self.assertRaises(ValueError):
+#             self.mover.add_stage_calibration(self.stage, Orientation.LEFT, 1)
 
-    def test_set_speed_xy_for_all_stages(self):
-        self.mover.speed_xy = 200
+#         self.assertEqual(current_calibrations, self.mover.calibrations)
 
-        self.assertEqual(self.mover._speed_xy, 200)
-        self.assertTrue(
-            all(s.get_speed_xy() == 200 for s in self.mover.connected_stages))
+#     def test_add_stage_calibration_reject_double_orientations(self):
+#         valid_calibration = self.mover.add_stage_calibration(
+#             self.stage, Orientation.LEFT, DevicePort.INPUT)
+#         current_calibrations = self.mover.calibrations
 
-    def test_get_speed_xy(self):
-        self.mover.speed_xy = 200
-        self.assertEqual(self.mover.speed_xy, 200)
+#         self.assertEqual(current_calibrations[(
+#             Orientation.LEFT, DevicePort.INPUT)], valid_calibration)
 
-    def test_get_speed_xy_updates_differing_stages(self):
-        self.mover.speed_xy = 200
-        self.stage.set_speed_xy(300)
+#         with self.assertRaises(MoverError) as error_context:
+#             self.mover.add_stage_calibration(
+#                 self.stage2, Orientation.LEFT, DevicePort.OUTPUT)
 
-        self.assertEqual(self.mover.speed_xy, 200)
-        self.assertEqual(self.stage.get_speed_xy(), 200)
-        self.assertEqual(self.stage2.get_speed_xy(), 200)
+#         with self.assertRaises(KeyError):
+#             self.mover.calibrations[(Orientation.LEFT, DevicePort.OUTPUT)]
 
-    def test_set_speed_z_raises_error_if_lower_bound_is_violated(self):
-        with self.assertRaises(ValueError) as error:
-            self.mover.speed_z = self.mover.SPEED_LOWER_BOUND - 1
+#         self.assertEqual(
+#             "A stage has already been assigned for Left.", str(
+#                 error_context.exception))
+#         self.assertEqual(current_calibrations, self.mover.calibrations)
+#         self.assertEqual(1, len(self.mover.calibrations))
 
-        self.assertEqual(
-            "Speed for z is out of valid range.", str(
-                error.exception))
-        self.assertTrue(
-            all(s.get_speed_z() == self.mover._speed_z for s in self.mover.connected_stages))
+#     def test_add_stage_calibration_reject_double_ports(self):
+#         valid_calibration = self.mover.add_stage_calibration(
+#             self.stage, Orientation.LEFT, DevicePort.INPUT)
+#         current_calibrations = self.mover.calibrations
 
-    def test_set_speed_z_raises_error_if_upper_bound_is_violated(self):
-        with self.assertRaises(ValueError) as error:
-            self.mover.speed_z = self.mover.SPEED_UPPER_BOUND + 1
+#         self.assertEqual(current_calibrations[(
+#             Orientation.LEFT, DevicePort.INPUT)], valid_calibration)
 
-        self.assertEqual(
-            "Speed for z is out of valid range.", str(
-                error.exception))
-        self.assertTrue(
-            all(s.get_speed_z() == self.mover._speed_z for s in self.mover.connected_stages))
+#         with self.assertRaises(MoverError) as error_context:
+#             self.mover.add_stage_calibration(
+#                 self.stage2, Orientation.RIGHT, DevicePort.INPUT)
 
-    def test_set_speed_z_for_all_stages(self):
-        self.mover.speed_z = 200
+#         with self.assertRaises(KeyError):
+#             self.mover.calibrations[(Orientation.RIGHT, DevicePort.INPUT)]
 
-        self.assertEqual(self.mover._speed_z, 200)
-        self.assertTrue(
-            all(s.get_speed_z() == 200 for s in self.mover.connected_stages))
+#         self.assertEqual(
+#             "A stage has already been assigned for the Input port.", str(
+#                 error_context.exception))
+#         self.assertEqual(current_calibrations, self.mover.calibrations)
+#         self.assertEqual(1, len(self.mover.calibrations))
 
-    def test_get_speed_z(self):
-        self.mover.speed_z = 200
-        self.assertEqual(self.mover.speed_z, 200)
+#     def test_add_stage_calibration_reject_double_stages(self):
+#         valid_calibration = self.mover.add_stage_calibration(
+#             self.stage, Orientation.LEFT, DevicePort.INPUT)
+#         current_calibrations = self.mover.calibrations
 
-    def test_get_speed_z_updates_differing_stages(self):
-        self.mover.speed_z = 200
-        self.stage.set_speed_z(300)
+#         self.assertEqual(current_calibrations[(
+#             Orientation.LEFT, DevicePort.INPUT)], valid_calibration)
 
-        self.assertEqual(self.mover.speed_z, 200)
-        self.assertEqual(self.stage.get_speed_z(), 200)
-        self.assertEqual(self.stage2.get_speed_z(), 200)
+#         with self.assertRaises(MoverError) as error_context:
+#             self.mover.add_stage_calibration(
+#                 self.stage, Orientation.TOP, DevicePort.OUTPUT)
 
-    def test_set_acceleration_xy_raises_error_if_lower_bound_is_violated(self):
-        with self.assertRaises(ValueError) as error:
-            self.mover.acceleration_xy = self.mover.ACCELERATION_LOWER_BOUND - 1
+#         self.assertEqual("Stage {} has already an assignment.".format(
+#             str(self.stage)), str(error_context.exception))
+#         self.assertEqual(current_calibrations, self.mover.calibrations)
+#         self.assertEqual(1, len(self.mover.calibrations))
 
-        self.assertEqual(
-            "Acceleration for xy is out of valid range.", str(
-                error.exception))
-        self.assertTrue(all(s.get_acceleration_xy(
-        ) == self.mover._acceleration_xy for s in self.mover.connected_stages))
+#     def test_active_stage_includes_new_stage(self):
+#         self.mover.add_stage_calibration(
+#             self.stage, Orientation.LEFT, DevicePort.INPUT)
+#         self.mover.add_stage_calibration(
+#             self.stage2, Orientation.RIGHT, DevicePort.OUTPUT)
 
-    def test_set_acceleration_xy_raises_error_if_upper_bound_is_violated(self):
-        with self.assertRaises(ValueError) as error:
-            self.mover.acceleration_xy = self.mover.ACCELERATION_UPPER_BOUND + 1
+#         self.assertIn(self.stage, self.mover.active_stages)
+#         self.assertIn(self.stage2, self.mover.active_stages)
 
-        self.assertEqual(
-            "Acceleration for xy is out of valid range.", str(
-                error.exception))
-        self.assertTrue(all(s.get_acceleration_xy(
-        ) == self.mover._acceleration_xy for s in self.mover.connected_stages))
+#     def test_left_and_input_calibration_property(self):
+#         calibration = self.mover.add_stage_calibration(
+#             self.stage, Orientation.LEFT, DevicePort.INPUT)
+#         self.assertEqual(calibration, self.mover.left_calibration)
+#         self.assertEqual(calibration, self.mover.input_calibration)
 
-    def test_set_acceleration_xy_for_all_stages(self):
-        self.mover.acceleration_xy = 200
+#     def test_right_and_output_calibration_property(self):
+#         calibration = self.mover.add_stage_calibration(
+#             self.stage, Orientation.RIGHT, DevicePort.OUTPUT)
+#         self.assertEqual(calibration, self.mover.right_calibration)
+#         self.assertEqual(calibration, self.mover.output_calibration)
 
-        self.assertEqual(self.mover._acceleration_xy, 200)
-        self.assertTrue(all(s.get_acceleration_xy() ==
-                        200 for s in self.mover.connected_stages))
+#     def test_top_and_input_calibration_property(self):
+#         calibration = self.mover.add_stage_calibration(
+#             self.stage, Orientation.TOP, DevicePort.INPUT)
+#         self.assertEqual(calibration, self.mover.top_calibration)
+#         self.assertEqual(calibration, self.mover.input_calibration)
 
-    def test_get_acceleration_xy(self):
-        self.mover.acceleration_xy = 200
-        self.assertEqual(self.mover.acceleration_xy, 200)
+#     def test_bottom_and_output_calibration_property(self):
+#         calibration = self.mover.add_stage_calibration(
+#             self.stage, Orientation.BOTTOM, DevicePort.OUTPUT)
+#         self.assertEqual(calibration, self.mover.bottom_calibration)
+#         self.assertEqual(calibration, self.mover.output_calibration)
 
-    def test_get_acceleration_xy_updates_differing_stages(self):
-        self.mover.acceleration_xy = 200
-        self.stage.set_acceleration_xy(300)
 
-        self.assertEqual(self.mover.acceleration_xy, 200)
-        self.assertEqual(self.stage.get_acceleration_xy(), 200)
-        self.assertEqual(self.stage2.get_acceleration_xy(), 200)
+# class MoverStageSettingsTest(unittest.TestCase):
+#     """
+#     Tests stage settings.
+#     """
 
-    def test_set_z_lift_rejects_negative_heights(self):
-        with self.assertRaises(AssertionError):
-            self.mover.z_lift = -1
+#     def setUp(self) -> None:
+#         self.stage = DummyStage('usb:123456789')
+#         self.stage2 = DummyStage('usb:9887654321')
 
-    def test_z_lift(self):
-        self.mover.z_lift = 10
-        self.assertEqual(self.mover.z_lift, 10)
+#         with patch.object(Stage, "find_available_stages", return_value=[]):
+#             with patch.object(Stage, "find_stage_classes", return_value=[]):
+#                 self.mover = MoverNew(None)
+
+#         self.mover.add_stage_calibration(
+#             self.stage, Orientation.LEFT, DevicePort.INPUT)
+#         self.mover.add_stage_calibration(
+#             self.stage2, Orientation.RIGHT, DevicePort.OUTPUT)
+
+#         self.stage.connect()
+#         self.stage2.connect()
+#         return super().setUp()
+
+#     def test_set_speed_xy_raises_error_if_lower_bound_is_violated(self):
+#         with self.assertRaises(ValueError) as error:
+#             self.mover.speed_xy = self.mover.SPEED_LOWER_BOUND - 1
+
+#         self.assertEqual(
+#             "Speed for xy is out of valid range.", str(
+#                 error.exception))
+#         self.assertTrue(all(
+#             s.get_speed_xy() == self.mover._speed_xy for s in self.mover.connected_stages))
+
+#     def test_set_speed_xy_raises_error_if_upper_bound_is_violated(self):
+#         with self.assertRaises(ValueError) as error:
+#             self.mover.speed_xy = self.mover.SPEED_UPPER_BOUND + 1
+
+#         self.assertEqual(
+#             "Speed for xy is out of valid range.", str(
+#                 error.exception))
+#         self.assertTrue(all(
+#             s.get_speed_xy() == self.mover._speed_xy for s in self.mover.connected_stages))
+
+#     def test_set_speed_xy_for_all_stages(self):
+#         self.mover.speed_xy = 200
+
+#         self.assertEqual(self.mover._speed_xy, 200)
+#         self.assertTrue(
+#             all(s.get_speed_xy() == 200 for s in self.mover.connected_stages))
+
+#     def test_get_speed_xy(self):
+#         self.mover.speed_xy = 200
+#         self.assertEqual(self.mover.speed_xy, 200)
+
+#     def test_get_speed_xy_updates_differing_stages(self):
+#         self.mover.speed_xy = 200
+#         self.stage.set_speed_xy(300)
+
+#         self.assertEqual(self.mover.speed_xy, 200)
+#         self.assertEqual(self.stage.get_speed_xy(), 200)
+#         self.assertEqual(self.stage2.get_speed_xy(), 200)
+
+#     def test_set_speed_z_raises_error_if_lower_bound_is_violated(self):
+#         with self.assertRaises(ValueError) as error:
+#             self.mover.speed_z = self.mover.SPEED_LOWER_BOUND - 1
+
+#         self.assertEqual(
+#             "Speed for z is out of valid range.", str(
+#                 error.exception))
+#         self.assertTrue(
+#             all(s.get_speed_z() == self.mover._speed_z for s in self.mover.connected_stages))
+
+#     def test_set_speed_z_raises_error_if_upper_bound_is_violated(self):
+#         with self.assertRaises(ValueError) as error:
+#             self.mover.speed_z = self.mover.SPEED_UPPER_BOUND + 1
+
+#         self.assertEqual(
+#             "Speed for z is out of valid range.", str(
+#                 error.exception))
+#         self.assertTrue(
+#             all(s.get_speed_z() == self.mover._speed_z for s in self.mover.connected_stages))
+
+#     def test_set_speed_z_for_all_stages(self):
+#         self.mover.speed_z = 200
+
+#         self.assertEqual(self.mover._speed_z, 200)
+#         self.assertTrue(
+#             all(s.get_speed_z() == 200 for s in self.mover.connected_stages))
+
+#     def test_get_speed_z(self):
+#         self.mover.speed_z = 200
+#         self.assertEqual(self.mover.speed_z, 200)
+
+#     def test_get_speed_z_updates_differing_stages(self):
+#         self.mover.speed_z = 200
+#         self.stage.set_speed_z(300)
+
+#         self.assertEqual(self.mover.speed_z, 200)
+#         self.assertEqual(self.stage.get_speed_z(), 200)
+#         self.assertEqual(self.stage2.get_speed_z(), 200)
+
+#     def test_set_acceleration_xy_raises_error_if_lower_bound_is_violated(self):
+#         with self.assertRaises(ValueError) as error:
+#             self.mover.acceleration_xy = self.mover.ACCELERATION_LOWER_BOUND - 1
+
+#         self.assertEqual(
+#             "Acceleration for xy is out of valid range.", str(
+#                 error.exception))
+#         self.assertTrue(all(s.get_acceleration_xy(
+#         ) == self.mover._acceleration_xy for s in self.mover.connected_stages))
+
+#     def test_set_acceleration_xy_raises_error_if_upper_bound_is_violated(self):
+#         with self.assertRaises(ValueError) as error:
+#             self.mover.acceleration_xy = self.mover.ACCELERATION_UPPER_BOUND + 1
+
+#         self.assertEqual(
+#             "Acceleration for xy is out of valid range.", str(
+#                 error.exception))
+#         self.assertTrue(all(s.get_acceleration_xy(
+#         ) == self.mover._acceleration_xy for s in self.mover.connected_stages))
+
+#     def test_set_acceleration_xy_for_all_stages(self):
+#         self.mover.acceleration_xy = 200
+
+#         self.assertEqual(self.mover._acceleration_xy, 200)
+#         self.assertTrue(all(s.get_acceleration_xy() ==
+#                         200 for s in self.mover.connected_stages))
+
+#     def test_get_acceleration_xy(self):
+#         self.mover.acceleration_xy = 200
+#         self.assertEqual(self.mover.acceleration_xy, 200)
+
+#     def test_get_acceleration_xy_updates_differing_stages(self):
+#         self.mover.acceleration_xy = 200
+#         self.stage.set_acceleration_xy(300)
+
+#         self.assertEqual(self.mover.acceleration_xy, 200)
+#         self.assertEqual(self.stage.get_acceleration_xy(), 200)
+#         self.assertEqual(self.stage2.get_acceleration_xy(), 200)
+
+#     def test_set_z_lift_rejects_negative_heights(self):
+#         with self.assertRaises(AssertionError):
+#             self.mover.z_lift = -1
+
+#     def test_z_lift(self):
+#         self.mover.z_lift = 10
+#         self.assertEqual(self.mover.z_lift, 10)

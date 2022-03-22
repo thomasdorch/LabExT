@@ -180,7 +180,7 @@ class Stage(ABC):
         pass
 
     @abstractproperty
-    def position(self):
+    def position(self) -> list:
         pass
 
     @abstractmethod

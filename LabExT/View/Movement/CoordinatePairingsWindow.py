@@ -7,13 +7,12 @@ This program is free software and comes with ABSOLUTELY NO WARRANTY; for details
 
 from tkinter import Frame, Toplevel, Button, Label, messagebox, LEFT, RIGHT, TOP, X, BOTH, DISABLED, FLAT, NORMAL, Y
 from LabExT.Utils import run_with_wait_window
-from LabExT.View.Controls.CoordinateWidget import CoordinateWidget
+from LabExT.View.Controls.CoordinateWidget import CoordinateWidget, StagePositionWidget
 from LabExT.View.Controls.CustomFrame import CustomFrame
 from LabExT.View.Controls.DeviceTable import DeviceTable
 
 from LabExT.Movement.Stage import StageError
 import LabExT.Movement.Transformations as Transformations
-from LabExT.View.Movement.StagePositionWidget import StagePositionWidget
 
 
 class CoordinatePairingsWindow(Toplevel):
@@ -25,6 +24,7 @@ class CoordinatePairingsWindow(Toplevel):
             self,
             experiment_manager,
             parent,
+            mover,
             in_calibration=None,
             out_calibration=None,
             on_finish=None):
@@ -36,6 +36,8 @@ class CoordinatePairingsWindow(Toplevel):
             raise ValueError("Cannot create pairing without chip imported. ")
 
         self.experiment_manager = experiment_manager
+        self.mover = mover
+
         self._in_calibration = in_calibration
         self._out_calibration = out_calibration
         self._on_finish = on_finish
@@ -172,20 +174,22 @@ class CoordinatePairingsWindow(Toplevel):
 
         try:
             if self._in_calibration:
-                self.pairings.append(Transformations.CoordinatePairing(
-                    self._in_calibration,
-                    self._in_calibration.stage.position,
-                    self._device,
-                    self._device._in_position
-                ))
+                with self._in_calibration.in_coordinate_system(Transformations.StageCoordinate):
+                    self.pairings.append(Transformations.CoordinatePairing(
+                        self._in_calibration,
+                        self._in_calibration.position,
+                        self._device,
+                        self._device.input_coordinate
+                    ))
 
             if self._out_calibration:
-                self.pairings.append(Transformations.CoordinatePairing(
-                    self._out_calibration,
-                    self._out_calibration.stage.position,
-                    self._device,
-                    self._device._out_position
-                ))
+                with self._out_calibration.in_coordinate_system(Transformations.StageCoordinate):
+                    self.pairings.append(Transformations.CoordinatePairing(
+                        self._out_calibration,
+                        self._out_calibration.position,
+                        self._device,
+                        self._device.output_coordinate
+                    ))
         except StageError as e:
             messagebox.showerror(
                 "Error", "Could not get current position: {}".format(e))
@@ -227,27 +231,13 @@ class CoordinatePairingsWindow(Toplevel):
         if self._device is None:
             return
 
-        if self._in_calibration and self._in_calibration.can_move_absolute:
-            stage_inport = self._in_calibration._single_point_fixation.chip_to_stage(self._device._in_position)
-            if messagebox.askyesno(
-                title="Move to device?",
-                message="Your input stage can move approximately absolutely in the chip coordinate system. Do you want to move to the input port? DEBUG APPROX: {}".format(stage_inport),
-                parent=self):
-                    run_with_wait_window(
-                        self, description="Move {} to {}".format(
-                            self._in_calibration, self._device.short_str()), function=lambda: self._in_calibration.move_absolute_approximated(
-                                self._device._in_position, z_lift=20))
-
-        if self._out_calibration and self._out_calibration.can_move_absolute:
-            stage_output = self._out_calibration._single_point_fixation.chip_to_stage(self._device._out_position)
-            if messagebox.askyesno(
-                title="Move to device?",
-                message="Your output stage can move approximately absolutely in the chip coordinate system. Do you want to move to the output port? DEBUG APPROX: {}".format(stage_output),
-                parent=self):
-                    run_with_wait_window(
-                        self, description="Move {} to {}".format(
-                            self._out_calibration, self._device.short_str()), function=lambda: self._in_calibration.move_absolute_approximated(
-                                self._device._out_position, z_lift=20))
+        if self.mover.can_move_to_device and messagebox.askyesno(
+            title="Move to device?",
+            message="Your stages can move absolutely in the chip coordinate system. Do you want to move to the device?",
+            parent=self):
+                run_with_wait_window(
+                    self, description="Move to device {}".format(
+                        self._device.short_str()), function=lambda: self.mover.move_to_device(self._device))
 
     #
     #   Helpers
@@ -266,9 +256,7 @@ class CoordinatePairingsWindow(Toplevel):
 
             CoordinateWidget(
                 pairing_frame,
-                coordinate=Transformations.make_3d_coordinate(
-                    self._device._in_position if calibration.is_input_stage else self._device._out_position
-                )
+                coordinate=self._device.input_coordinate if calibration.is_input_stage else self._device.output_coordinate
             ).pack(side=LEFT)
 
             Label(
@@ -276,10 +264,7 @@ class CoordinatePairingsWindow(Toplevel):
                 text="will be paired with Stage coordinate:"
             ).pack(side=LEFT)
 
-            StagePositionWidget(
-                pairing_frame,
-                stage=calibration.stage
-            ).pack(side=LEFT)
+            StagePositionWidget(pairing_frame, calibration).pack(side=LEFT)
         else:
             Label(
                 pairing_frame,

@@ -122,8 +122,8 @@ class DummyStage(Stage):
     def get_current_position(self):
         return [0, 0]
 
-    def move_relative(self, x, y, z=0):
-        pass
+    def move_relative(self, x, y, z):
+        print("Move x: {}, y: {}, z:{}".format(x,y,z))
 
-    def move_absolute(self, pos):
-        pass
+    def move_absolute(self, x, y, z):
+        print("Move to x: {}, y: {}, z:{}".format(x,y,z))
