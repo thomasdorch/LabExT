@@ -6,6 +6,8 @@ This program is free software and comes with ABSOLUTELY NO WARRANTY; for details
 """
 
 from tkinter import Frame, Toplevel, Button, Label, messagebox, LEFT, RIGHT, TOP, X, BOTH, DISABLED, FLAT, NORMAL, Y
+from typing import Callable, Type
+from LabExT.Movement.Calibration import Calibration
 from LabExT.Utils import run_with_wait_window
 from LabExT.View.Controls.CoordinateWidget import CoordinateWidget, StagePositionWidget
 from LabExT.View.Controls.CustomFrame import CustomFrame
@@ -13,6 +15,7 @@ from LabExT.View.Controls.DeviceTable import DeviceTable
 
 from LabExT.Movement.Stage import StageError
 import LabExT.Movement.Transformations as Transformations
+from LabExT.Wafer.Device import Device
 
 
 class CoordinatePairingsWindow(Toplevel):
@@ -22,8 +25,8 @@ class CoordinatePairingsWindow(Toplevel):
 
     def __init__(
             self,
+            master,
             experiment_manager,
-            parent,
             mover,
             in_calibration=None,
             out_calibration=None,
@@ -38,13 +41,13 @@ class CoordinatePairingsWindow(Toplevel):
         self.experiment_manager = experiment_manager
         self.mover = mover
 
-        self._in_calibration = in_calibration
-        self._out_calibration = out_calibration
-        self._on_finish = on_finish
+        self._in_calibration: Type[Calibration] = in_calibration
+        self._out_calibration: Type[Calibration] = out_calibration
+        self._on_finish: Callable = on_finish
 
-        super(CoordinatePairingsWindow, self).__init__(parent)
+        super(CoordinatePairingsWindow, self).__init__(master)
 
-        self._device = None
+        self._device: Type[Device] = None
         self.pairings = []
 
         # Set up window

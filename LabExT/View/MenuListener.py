@@ -23,10 +23,9 @@ from LabExT.View.ExtraPlots import ExtraPlots
 from LabExT.View.InstrumentConnectionDebugger import InstrumentConnectionDebugger
 from LabExT.View.LiveViewer.LiveViewerController import LiveViewerController
 from LabExT.View.MoveDeviceWindow import MoveDeviceWindow
-from LabExT.View.MovementWizard.MovementWizardController import MovementWizardController
+from LabExT.View.Movement.MovementController import MovementController
 from LabExT.View.ProgressBar.ProgressBar import ProgressBar
 from LabExT.View.SearchForPeakPlotsWindow import SearchForPeakPlotsWindow
-from LabExT.View.MovementCalibration.MovementCalibrationController import MovementCalibrationController
 from LabExT.View.StageDriverSettingsDialog import StageDriverSettingsDialog
 
 
@@ -189,6 +188,10 @@ class MListener:
         """
         sys.exit(0)
 
+    #
+    #   Movement actions
+    #
+
     def client_configure_mover(self):
         """
         Open wizard to configure the Mover.
@@ -196,7 +199,7 @@ class MListener:
         if try_to_lift_window(self.movement_wizard_toplevel):
             return
         
-        movement_wizard = MovementWizardController(
+        movement_wizard = MovementController(
             self._experiment_manager, self._experiment_manager.mover_new, parent=self._root)
         self.movement_wizard_toplevel = movement_wizard.view
 
@@ -207,9 +210,33 @@ class MListener:
         if try_to_lift_window(self.calibraton_wizard_toplevel):
             return
 
-        calibraton_wizard = MovementCalibrationController(
-                self._experiment_manager, self._experiment_manager.mover_new, parent=self._root)
-        self.calibraton_wizard_toplevel = calibraton_wizard.view
+        # calibraton_wizard = MovementCalibrationController(
+        #         self._experiment_manager, self._experiment_manager.mover_new, parent=self._root)
+        # self.calibraton_wizard_toplevel = calibraton_wizard.view
+
+    def client_search_for_peak(self):
+        """
+        Opens Wizard to search for peak.
+        """
+        pass
+
+    def client_move_relative(self):
+        """
+        Moves the stages relative.
+        """
+        pass
+
+    def client_move_to_device(self):
+        """
+        Moves the stages to device.
+        """
+        pass
+
+    def client_reset_mover(self):
+        """
+        Resets the mover.
+        """
+        pass
 
     def client_configure_stages(self):
         """
@@ -345,15 +372,15 @@ class MListener:
             messagebox.showwarning('Error: No chip layout', msg)
             self.logger.warning(msg)
 
-    def client_search_for_peak(self):
-        """Called when user wants to open plotting window for search for peak observation."""
-        if try_to_lift_window(self.sfpp_toplevel):
-            return
+    # def client_search_for_peak(self):
+    #     """Called when user wants to open plotting window for search for peak observation."""
+    #     if try_to_lift_window(self.sfpp_toplevel):
+    #         return
 
-        self.logger.debug('Opening new search for peak window.')
-        sfpp = SearchForPeakPlotsWindow(parent=self._root,
-                                        experiment_manager=self._experiment_manager)
-        self.sfpp_toplevel = sfpp.plot_window
+    #     self.logger.debug('Opening new search for peak window.')
+    #     sfpp = SearchForPeakPlotsWindow(parent=self._root,
+    #                                     experiment_manager=self._experiment_manager)
+    #     self.sfpp_toplevel = sfpp.plot_window
 
     def client_extra_plots(self):
         """ Called when user wants to open extra plots. """

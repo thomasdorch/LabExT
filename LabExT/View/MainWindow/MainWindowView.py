@@ -5,11 +5,15 @@ LabExT  Copyright (C) 2021  ETH Zurich and Polariton Technologies AG
 This program is free software and comes with ABSOLUTELY NO WARRANTY; for details see LICENSE file.
 """
 
+from cProfile import label
 import logging
 from platform import system
+from re import L
 from tkinter import DISABLED, Frame, Menu, Checkbutton, \
     Label, StringVar, OptionMenu, LabelFrame, Button, scrolledtext
 from tkinter.font import NORMAL
+
+from click import command
 
 from LabExT.Logs.LoggingWidgetHandler import LoggingWidgetHandler
 from LabExT.Utils import get_labext_version
@@ -60,19 +64,37 @@ class MainWindowContextMenu(Menu):
             label="Quit",
             command=self._menu_listener.client_quit)
 
+        # New Mover Menuu
         self._movement_new.add_command(
             label="Mover State: {}".format(self.experiment_manger.mover_new.state),
             state=DISABLED)
         self._movement_new.add_separator()
         self._movement_new.add_command(
-            label="Configure Stages...",
-            command=self._menu_listener.client_configure_mover,
-            state=DISABLED if self.experiment_manger.mover_new.has_connected_stages else NORMAL)
-        self._movement_new.add_command(
-            label="Calibrate Stages...",
-            command=self._menu_listener.client_calibrate_mover,
-            state=NORMAL if self.experiment_manger.mover_new.has_connected_stages else DISABLED)
+            label="Configure Mover...",
+            command=self._menu_listener.client_configure_mover)
         self._movement_new.add_separator()
+        self._movement_new.add_command(
+            label="Mover Preferences...",
+            command=self._menu_listener.client_configure_mover)
+        self._movement_new.add_command(
+            label="Stage Calibration Preferences...",
+            command=self._menu_listener.client_calibrate_mover)
+        self._movement_new.add_separator()
+        self._movement_new.add_command(
+            label="Search for Peak...",
+            command=self._menu_listener.client_search_for_peak)
+        self._movement_new.add_separator()
+        self._movement_new.add_command(
+            label="Move relative...",
+            command=self._menu_listener.client_move_relative)
+        self._movement_new.add_command(
+            label="Move to Device...",
+            command=self._menu_listener.client_move_to_device)
+
+        self._movement_new.add_separator()
+        self._movement_new.add_command(
+            label="Reset Mover...",
+            command=self._menu_listener.client_reset_mover)
 
         self._movement.add_command(
             label="Configure Stages",

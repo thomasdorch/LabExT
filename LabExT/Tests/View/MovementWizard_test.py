@@ -14,7 +14,7 @@ from LabExT.Movement.Calibration import DevicePort, Orientation
 from LabExT.Movement.MoverNew import MoverError, MoverNew
 from LabExT.Movement.Stages.DummyStage import DummyStage
 
-from LabExT.View.MovementWizard.MovementWizardController import MovementWizardController, Stage
+from LabExT.View.Movement.MovementWizardController import MovementWizardController, Stage
 
 
 class MovementWizardAssignmentStepTest(TKinterTestCase):

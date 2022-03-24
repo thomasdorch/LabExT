@@ -136,10 +136,20 @@ class AxesRotation:
     def __init__(self) -> None:
         self._n = len(Axis)
         self._matrix = np.identity(len(Axis))  # 3x3 identity matrix
+        self._mapping = {
+            Axis.X: (Direction.POSITIVE, Axis.X),
+            Axis.Y: (Direction.POSITIVE, Axis.Y),
+            Axis.Z: (Direction.POSITIVE, Axis.Z),
+        }
 
     def reset(self):
         self._n = len(Axis)
         self._matrix = np.identity(len(Axis))  # 3x3 identity matrix
+        self._mapping = {
+            Axis.X: (Direction.POSITIVE, Axis.X),
+            Axis.Y: (Direction.POSITIVE, Axis.Y),
+            Axis.Z: (Direction.POSITIVE, Axis.Z),
+        }
 
     def update(self, chip_axis: Axis, direction: Direction, stage_axis: Axis):
         """
@@ -152,10 +162,15 @@ class AxesRotation:
         if not isinstance(direction, Direction):
             raise ValueError("Unknown direction given for calibration.")
 
+        self._mapping[chip_axis] = (direction, stage_axis) 
+
         # Replacing column of chip with signed (direction) i-th unit vector (i
         # is stage)
         self._matrix[:, chip_axis.value] = np.eye(
             1, 3, stage_axis.value) * direction.value
+
+    def get_mapped_stage_axis(self, chip_axis) -> tuple:
+        return self._mapping.get(chip_axis)
 
     @property
     def is_valid(self):

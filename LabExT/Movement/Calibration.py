@@ -46,7 +46,7 @@ class State(Enum):
     """
     Enumerate different calibration states.
     """
-    UNINITIALIZED = 0
+    NOT_CONFIGURED = 0
     CONNECTED = 1
     COORDINATE_SYSTEM_FIXED = 2
     SINGLE_POINT_FIXED = 3
@@ -97,7 +97,7 @@ class Calibration:
         self.mover = mover
         self.stage: Type[Stage] = stage
 
-        self._state = State.CONNECTED if stage.connected else State.UNINITIALIZED
+        self._state = State.CONNECTED if stage.connected else State.NOT_CONFIGURED
         self._orientation = orientation
         self._device_port = device_port
 
@@ -219,7 +219,7 @@ class Calibration:
         self.axes_rotation.reset()
         self.single_point_transformation.reset()
         self.full_transformation.reset()
-        self._state = State.CONNECTED if self.stage.connected else State.UNINITIALIZED
+        self._state = State.CONNECTED if self.stage.connected else State.NOT_CONFIGURED
 
         return True
 
@@ -232,7 +232,7 @@ class Calibration:
         4. Checks if full calibration is valid. If Yes, status is FULLY CALIBRATED.
         """
         # Reset state
-        self._state = State.UNINITIALIZED
+        self._state = State.NOT_CONFIGURED
 
         # 1. Check if stage responds
         if not skip_connection:

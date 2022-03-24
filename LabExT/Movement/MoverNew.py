@@ -113,6 +113,7 @@ class MoverNew:
         """
         Loads all available stages.
         """
+        print("load stages")
         self._available_stages = Stage.find_available_stages()
 
     def reload_stage_classes(self) -> None:
@@ -139,7 +140,7 @@ class MoverNew:
         Raises MoverError if not all calibrations are in the same state.
         """
         if not self.has_connected_stages:
-            return State.UNINITIALIZED
+            return State.NOT_CONFIGURED
 
         states = set(c.state for c in self.calibrations.values())
         if len(states) != 1:
