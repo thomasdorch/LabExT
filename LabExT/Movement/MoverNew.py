@@ -113,7 +113,6 @@ class MoverNew:
         """
         Loads all available stages.
         """
-        print("load stages")
         self._available_stages = Stage.find_available_stages()
 
     def reload_stage_classes(self) -> None:
