@@ -7,6 +7,7 @@ This program is free software and comes with ABSOLUTELY NO WARRANTY; for details
 
 from contextlib import contextmanager
 from functools import wraps
+from io import UnsupportedOperation
 import time
 import numpy as np
 from typing import Dict, Type
@@ -326,6 +327,8 @@ class Calibration:
         elif self.current_coordinate_system == ChipCoordinate:
             assert type(relative_difference) in (Coordinate, ChipCoordinate), "Use pass a chip coordinate to move the stage relative in chip coordinates."
             stage_relative_difference = self.axes_rotation.rotate_chip_to_stage(relative_difference)
+        else:
+            raise UnsupportedOperation("Unsupported coordinate system {} to move relative".format(self.current_coordinate_system))
 
         self.stage.move_relative(
             x=stage_relative_difference.x,
@@ -351,6 +354,10 @@ class Calibration:
                 stage_coordinate = self.full_transformation.chip_to_stage(coordinate)
             elif self.state == State.SINGLE_POINT_FIXED:
                 stage_coordinate = self.single_point_transformation.chip_to_stage(coordinate)
+            else:
+                raise CalibrationError("To move absolute in chip cooridnates you must fix your a single point or full calibrate the stage.")
+        else:
+            raise UnsupportedOperation("Unsupported coordinate system {} to move absolute".format(self.current_coordinate_system))
 
         self.stage.move_absolute(
             x=stage_coordinate.x,

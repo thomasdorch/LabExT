@@ -398,32 +398,6 @@ class MoverNew:
             calibration.current_coordinate_system = None
 
     #
-    #   Position Methods
-    #
-
-    @assert_connected_stages
-    def get_stage_positions(self):
-        """Read stage positions in all two resp. four dimensions in um.
-
-           return format for 2 stages is [lx, ly, rx, ry]
-           return format for 1 stage is [lx, ly]
-
-        Returns
-        ----------
-        list of double
-            current absolute stage coordinates of all configured dimensions
-
-        !!! PEAK SEACHER !!!
-        """
-        coords = []
-        if self.left_calibration:
-            coords += self.left_calibration.position.to_list()[:2]
-        if self.right_calibration:
-            coords += self.right_calibration.position.to_list()[:2]
-
-        return coords
-
-    #
     #   Movement Methods
     #
 
@@ -550,10 +524,10 @@ class MoverNew:
 
         movement_vector = {}
         if self.input_calibration:
-            movement_vector[self.input_calibration.orientation] = ChipCoordinate.from_list(device._in_position + [self._z_lift])
+            movement_vector[self.input_calibration.orientation] = ChipCoordinate(*device._in_position, z=self.z_lift)
         
         if self.output_calibration:
-            movement_vector[self.output_calibration.orientation] = ChipCoordinate.from_list(device._out_position + [self._z_lift])
+            movement_vector[self.output_calibration.orientation] = ChipCoordinate(*device._out_position, z=self.z_lift)
 
         self.move_absolute(movement_vector)
 
