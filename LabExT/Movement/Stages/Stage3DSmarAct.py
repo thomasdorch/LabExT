@@ -435,22 +435,6 @@ class Stage3DSmarAct(Stage):
             self.connected = False
             self.handle = None
 
-    # Properties
-
-    @property
-    def z_axis_direction(self):
-        return self._z_axis_direction
-
-    @z_axis_direction.setter
-    def z_axis_direction(self, newdir):
-        if newdir not in [-1, 1]:
-            raise ValueError("Z axis direction can only be 1 or -1.")
-        self._z_axis_direction = newdir
-
-    @property
-    def stage_lifted_up(self):
-        return self._stage_lifted_up
-
     @property
     @assert_driver_loaded
     @assert_stage_connected
@@ -557,7 +541,134 @@ class Stage3DSmarAct(Stage):
         """
         self._z_axis_direction = -self._z_axis_direction
 
-    # Movement methods
+    # Movement method
+
+    @assert_driver_loaded
+    @assert_stage_connected
+    def move_relative(self, x, y, z=0, wait_for_stopping: bool = True):
+        """Performs a relative movement by x and y. Specified in units of micrometers.
+
+        Parameters
+        ----------
+        x : int
+            Movement in x direction by x measured in um.
+        y : int
+            Movement in y direction by y measured in um.
+        z : int
+            Movement in z direction by z measured in um.
+        wait_for_stopping : bool
+            Wait until all axes have stopped.
+        """
+        self._logger.debug(
+            'Want to relative move %s to x = %s um, y = %s um and z = %s um',
+            self.address,
+            x,
+            y,
+            z)
+
+        self.channels[Axis.X].move(diff=x, mode=MovementType.RELATIVE)
+        self.channels[Axis.Y].move(diff=y, mode=MovementType.RELATIVE)
+        self.channels[Axis.Z].move(diff=z, mode=MovementType.RELATIVE)
+
+        if wait_for_stopping:
+            self._wait_for_stopping()
+
+    @assert_driver_loaded
+    @assert_stage_connected
+    def move_absolute(self, x, y, z, wait_for_stopping: bool = True):
+        """Performs an absolute movement to the specified position in units of micrometers.
+
+        Parameters
+        ----------
+        position : list
+            Position in [x,y] format measured in um
+        wait_for_stopping : bool
+            Wait until all axes have stopped.
+        """
+        self._logger.debug(
+            'Want to absolute move %s to x = %s um, y = %s um and z = %s um', self.address, x, y, z)
+
+        self.channels[Axis.X].move(
+            diff=x, mode=MovementType.ABSOLUTE)
+        self.channels[Axis.Y].move(
+            diff=y, mode=MovementType.ABSOLUTE)
+        self.channels[Axis.Z].move(
+            diff=z, mode=MovementType.ABSOLUTE)
+
+        if wait_for_stopping:
+            self._wait_for_stopping()
+
+    # Stage control
+
+    @assert_driver_loaded
+    @assert_stage_connected
+    def stop(self):
+        for channel in self.channels.values():
+            channel.stop()
+
+    # Helper methods
+
+    @classmethod
+    def _exit_if_error(self, status: int) -> bool:
+        if(status == MCSC.SA_OK):
+            return True
+
+        error_message = ct.c_char_p()
+        MCSC.SA_GetStatusInfo(status, error_message)
+
+        if error_message:
+            error_message = 'MCSControl Error: {}'.format(
+                error_message.value[:].decode('utf-8'))
+        else:
+            error_message = 'MCSControl Error: Undefined error occurred.'
+
+        raise StageError(error_message)
+
+    def _open_system(self):
+        handle = ct.c_ulong()
+        if self._exit_if_error(
+            MCSC.SA_OpenSystem(
+                handle,
+                self.address,
+                bytes('sync', 'utf-8'))):
+            return handle
+        return None
+
+    def _raise_if_sensor_non_linear(self) -> None:
+        for index, channel in self.channels.items():
+            if not channel.is_sensor_linear:
+                raise StageError(
+                    'Channel {} of stage {} has no supported linear sensor!'.format(
+                        index.name, self.address))
+        self._logger.debug("Linear x, y and z sensor present")
+
+    def _wait_for_stopping(self, delay=0.05):
+        """
+        Blocks until all channels have 'SA_STOPPED_STATUS' status.
+        """
+        while True:
+            time.sleep(delay)
+            if all(s == 'SA_STOPPED_STATUS' for s in self.get_status()):
+                break
+
+
+    #
+    #   !!! LEGACY SUPPORT !!!
+    #
+
+    @property
+    def z_axis_direction(self):
+        return self._z_axis_direction
+
+    @z_axis_direction.setter
+    def z_axis_direction(self, newdir):
+        if newdir not in [-1, 1]:
+            raise ValueError("Z axis direction can only be 1 or -1.")
+        self._z_axis_direction = newdir
+
+    @property
+    def stage_lifted_up(self):
+        return self._stage_lifted_up
 
     @assert_driver_loaded
     @assert_stage_connected
@@ -652,114 +763,3 @@ class Stage3DSmarAct(Stage):
             self.channels[Axis.X].position,
             self.channels[Axis.Y].position
         ]
-
-    @assert_driver_loaded
-    @assert_stage_connected
-    def move_relative(self, x, y, z=0, wait_for_stopping: bool = True):
-        """Performs a relative movement by x and y. Specified in units of micrometers.
-
-        Parameters
-        ----------
-        x : int
-            Movement in x direction by x measured in um.
-        y : int
-            Movement in y direction by y measured in um.
-        z : int
-            Movement in z direction by z measured in um.
-        wait_for_stopping : bool
-            Wait until all axes have stopped.
-        """
-        self._logger.debug(
-            'Want to relative move %s to x = %s um, y = %s um and z = %s um',
-            self.address,
-            x,
-            y,
-            z)
-
-        self.channels[Axis.X].move(diff=x, mode=MovementType.RELATIVE)
-        self.channels[Axis.Y].move(diff=y, mode=MovementType.RELATIVE)
-        self.channels[Axis.Z].move(diff=z, mode=MovementType.RELATIVE)
-
-        if wait_for_stopping:
-            self._wait_for_stopping()
-
-    @assert_driver_loaded
-    @assert_stage_connected
-    def move_absolute(self, pos, wait_for_stopping: bool = True):
-        """Performs an absolute movement to the specified position in units of micrometers.
-
-        Parameters
-        ----------
-        position : list
-            Position in [x,y] format measured in um
-        wait_for_stopping : bool
-            Wait until all axes have stopped.
-        """
-        self._logger.debug(
-            'Want to absolute move %s to x = %s um and y = %s um',
-            self.address,
-            pos[0],
-            pos[1])
-
-        self.channels[Axis.X].move(
-            diff=pos[0], mode=MovementType.ABSOLUTE)
-        self.channels[Axis.Y].move(
-            diff=pos[1], mode=MovementType.ABSOLUTE)
-        # self.channels[Axis.Z].move(
-        #     diff=pos[2], mode=MovementType.ABSOLUTE)
-
-        if wait_for_stopping:
-            self._wait_for_stopping()
-
-    # Stage control
-
-    @assert_driver_loaded
-    @assert_stage_connected
-    def stop(self):
-        for channel in self.channels.values():
-            channel.stop()
-
-    # Helper methods
-
-    @classmethod
-    def _exit_if_error(self, status: int) -> bool:
-        if(status == MCSC.SA_OK):
-            return True
-
-        error_message = ct.c_char_p()
-        MCSC.SA_GetStatusInfo(status, error_message)
-
-        if error_message:
-            error_message = 'MCSControl Error: {}'.format(
-                error_message.value[:].decode('utf-8'))
-        else:
-            error_message = 'MCSControl Error: Undefined error occurred.'
-
-        raise StageError(error_message)
-
-    def _open_system(self):
-        handle = ct.c_ulong()
-        if self._exit_if_error(
-            MCSC.SA_OpenSystem(
-                handle,
-                self.address,
-                bytes('sync', 'utf-8'))):
-            return handle
-        return None
-
-    def _raise_if_sensor_non_linear(self) -> None:
-        for index, channel in self.channels.items():
-            if not channel.is_sensor_linear:
-                raise StageError(
-                    'Channel {} of stage {} has no supported linear sensor!'.format(
-                        index.name, self.address))
-        self._logger.debug("Linear x, y and z sensor present")
-
-    def _wait_for_stopping(self, delay=0.05):
-        """
-        Blocks until all channels have 'SA_STOPPED_STATUS' status.
-        """
-        while True:
-            time.sleep(delay)
-            if all(s == 'SA_STOPPED_STATUS' for s in self.get_status()):
-                break

@@ -5,32 +5,67 @@ LabExT  Copyright (C) 2022  ETH Zurich and Polariton Technologies AG
 This program is free software and comes with ABSOLUTELY NO WARRANTY; for details see LICENSE file.
 """
 
+from itertools import combinations
 import unittest
+import pytest
+from os.path import join
+
 from unittest.mock import Mock, patch
 from LabExT.Movement.Stages.DummyStage import DummyStage
 from LabExT.Movement.Calibration import DevicePort, Orientation
 
 from LabExT.Movement.MoverNew import MoverError, MoverNew, Stage, assert_connected_stages
+from LabExT.Movement.Transformations import ChipCoordinate, CoordinatePairing, StageCoordinate
 from LabExT.Tests.Utils import with_stage_discovery_patch
+from LabExT.Wafer.Chip import Chip
 
+class MoverTest(unittest.TestCase):
+    @with_stage_discovery_patch
+    def setUp(self, available_stages_mock, stage_classes_mock) -> None:
+        stage_classes_mock.return_value = []
+        available_stages_mock.return_value = []
+        
+        self.mover = MoverNew(None)
+        self.stage_left = Mock('usb:123456789')
+        self.stage_right = Mock('usb:123456789')
+        self.stage_left.connected = True
+        self.stage_right.connected = True
 
-class FooTest(unittest.TestCase):
+        self.calibration_left = self.mover.add_stage_calibration(self.stage_left, Orientation.LEFT, DevicePort.INPUT)
+        self.calibration_right = self.mover.add_stage_calibration(self.stage_right, Orientation.RIGHT, DevicePort.OUTPUT)
 
-    def setUp(self) -> None:
-        self.stage = DummyStage('usb:123456789')
+        self.calibration_left.update_single_point_transformation(CoordinatePairing(
+            self.calibration_left,
+            StageCoordinate(0,0,0),
+            object(),
+            ChipCoordinate(0,0,0)
+        ))
 
-        with patch.object(Stage, "find_available_stages", return_value=[]):
-            with patch.object(Stage, "find_stage_classes", return_value=[]):
-                self.mover = MoverNew(None)
+        self.calibration_right.update_single_point_transformation(CoordinatePairing(
+            self.calibration_left,
+            StageCoordinate(0,0,0),
+            object(),
+            ChipCoordinate(0,0,0)
+        ))
 
-        self.calibration = self.mover.add_stage_calibration(self.stage, Orientation.LEFT, DevicePort.INPUT)
-        self.calibration.connect_to_stage()
+        self.chip = Chip(join(pytest.fixture_folder, "QuarkJaejaChip.csv"))
+    
+   
+    def test_chip_file(self):
+        
+        self.stage_left.move_absolute = Mock()
+        self.stage_right.move_absolute = Mock()
 
-        return super().setUp()
+        for d1, d2 in combinations(self.chip._devices.values(), 2):
+            
+            self.stage_left.position = d1._in_position + [0]
+            self.stage_right.position = d1._out_position + [0]
 
-    def test_foo(self):
+            self.mover.move_absolute({
+                Orientation.LEFT: ChipCoordinate.from_list(d2._in_position),
+                Orientation.RIGHT: ChipCoordinate.from_list(d2._out_position)
+            })
 
-        self.mover.lift_stages()
 
 # class AssertConnectedStagesTest(unittest.TestCase):
 #     """

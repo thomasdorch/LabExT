@@ -204,7 +204,7 @@ class ExperimentManager:
         # then we generate the documentation
         # generate the documentation
         self.docu = DocumentationEngine(experiment_manager=self)
-        self.docu.generate_index_html()
+        # self.docu.generate_index_html()
         self.setup_done = True
 
     def load_addon_settings(self):

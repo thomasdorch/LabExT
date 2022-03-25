@@ -218,7 +218,13 @@ class MListener:
         """
         Opens Wizard to search for peak.
         """
-        pass
+        if try_to_lift_window(self.sfpp_toplevel):
+            return
+
+        self.logger.debug('Opening new search for peak window.')
+        sfpp = SearchForPeakPlotsWindow(parent=self._root,
+                                        experiment_manager=self._experiment_manager)
+        self.sfpp_toplevel = sfpp.plot_window
 
     def client_move_relative(self):
         """
@@ -229,78 +235,6 @@ class MListener:
     def client_move_to_device(self):
         """
         Moves the stages to device.
-        """
-        pass
-
-    def client_reset_mover(self):
-        """
-        Resets the mover.
-        """
-        pass
-
-    def client_configure_stages(self):
-        """
-        Open stage info and configuration window.
-        """
-        if try_to_lift_window(self.stage_configure_toplevel):
-            return
-        
-        self.stage_configure_toplevel = Toplevel(self._root)
-        self.stage_configure_toplevel.lift()
-        ConfigureStageWindow(self.stage_configure_toplevel, self._experiment_manager)
-
-    def client_move_stages(self):
-        """Called when the user wants to move the stages manually.
-        Opens a window with parameters for relative movement.
-        """
-        if try_to_lift_window(self.stage_movement_toplevel):
-            return
-
-        self.logger.debug('Client wants to move stages manually')
-
-        # create new window
-        self.stage_movement_toplevel = Toplevel(self._root)
-        self.stage_movement_toplevel.attributes('-topmost', 'true')
-
-        self._params = {}
-        for dim_name in ['Left X', 'Left Y', 'Right X', 'Right Y']:
-            self._params[dim_name] = ConfigParameter(self.stage_movement_toplevel, unit='um', parameter_type='number_float')
-
-        param_table = ParameterTable(self.stage_movement_toplevel)
-        param_table.grid(row=0, column=0, padx=5, pady=50)
-        param_table.title = 'Relative movement of stages'
-        param_table.parameter_source = self._params
-
-        if len(self._params) == 0:
-            lbl = Label(self.stage_movement_toplevel, text='Mover not initialized yet.')
-            lbl.grid(row=0, column=0)
-        else:
-            ok_button = Button(self.stage_movement_toplevel, text='Move stages', command=self._move_relative)
-            ok_button.grid(row=1, column=0, sticky='e')
-
-    def _move_relative(self):
-        """Called when the user presses on button 'Move stages' in
-        client_move_stages. Calls mover to perform a relative movement.
-        """
-        # get values from input fields
-        relative_moves = []
-        for dim_name in ['Left X', 'Left Y', 'Right X', 'Right Y']:
-            relative_moves.append(self._params[dim_name].value)
-        self.logger.info('Client wants to move stages manually - %s', relative_moves)
-
-        try:
-            self._experiment_manager.mover_new.lift_stages()
-            self._experiment_manager.mover_new.move_relative(
-                left=relative_moves[:2], right=relative_moves[2:])
-            self._experiment_manager.mover_new.lower_stages()
-        except Exception as exc:
-            msg = 'Could not move stages manually! Reason: ' + repr(exc)
-            messagebox.showinfo('Error', msg)
-            self.logger.exception(msg)
-
-    def client_move_device(self):
-        """Called when the user wants to move the stages to a specific device.
-        Opens a MoveDeviceWindow and uses mover to perform the movement.
         """
         self.logger.debug('client wants to move to specific device')
 
@@ -348,39 +282,11 @@ class MListener:
         messagebox.showinfo('Success', msg)
         self.logger.info(msg)
 
-    def client_transformation(self):
-        """Called when user wants to perform a coordinate transformation.
-        Calls check_for_saved_transformation in mover to check for saved transformation.
-        The user can than decide if he wants to load the saved transformation or make a new one.
+    def client_reset_mover(self):
         """
-        self.logger.debug('Client wants to perform transformation.')
-
-        if self._experiment_manager.chip:
-            try:
-                self._experiment_manager.mover.check_for_saved_transformation()
-            except Exception as exc:
-                msg = 'Transformation raised Exception. Reason: ' + repr(exc)
-                messagebox.showinfo('Transformation aborted', msg)
-                self.logger.error(msg)
-
-            if not self._experiment_manager.mover.trafo_enabled:
-                msg = 'Error: Automatic movement not enabled.'
-                messagebox.showerror('Error', msg)
-                self.logger.error(msg)
-        else:
-            msg = 'No chip file imported. Cannot do coordinate transformation for stages with no chip file present.'
-            messagebox.showwarning('Error: No chip layout', msg)
-            self.logger.warning(msg)
-
-    # def client_search_for_peak(self):
-    #     """Called when user wants to open plotting window for search for peak observation."""
-    #     if try_to_lift_window(self.sfpp_toplevel):
-    #         return
-
-    #     self.logger.debug('Opening new search for peak window.')
-    #     sfpp = SearchForPeakPlotsWindow(parent=self._root,
-    #                                     experiment_manager=self._experiment_manager)
-    #     self.sfpp_toplevel = sfpp.plot_window
+        Resets the mover.
+        """
+        pass
 
     def client_extra_plots(self):
         """ Called when user wants to open extra plots. """

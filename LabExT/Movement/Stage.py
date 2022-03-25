@@ -184,9 +184,9 @@ class Stage(ABC):
         pass
 
     @abstractmethod
-    def move_relative(self, x, y):
+    def move_relative(self, x, y, z):
         pass
 
     @abstractmethod
-    def move_absolute(self, pos):
+    def move_absolute(self, x, y, z):
         pass

@@ -42,3 +42,7 @@ bidict
 # pip-tools
 # build
 # twine
+
+# tools for testing
+pytest
+parameterized

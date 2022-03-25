@@ -105,7 +105,7 @@ class Calibration:
         self._single_point_transformation: Type[Transformation] = SinglePointTransformation(self._axes_rotation)
         self._full_transformation: Type[Transformation] = KabschRotation()
 
-        self.current_coordinate_system: Type[Coordinate] = None
+        self._current_coordinate_system: Type[Coordinate] = None
 
     #
     #   Representation
@@ -125,11 +125,25 @@ class Calibration:
 
     @contextmanager
     def in_coordinate_system(self, coordinate_system: Type[Coordinate]):
+        if coordinate_system is None:
+            raise ValueError("Cannot set coordinate system to None in Context")
+
         self.current_coordinate_system = coordinate_system
         try:
             yield
         finally:
             self.current_coordinate_system = None
+
+    @property
+    def current_coordinate_system(self):
+        return self._current_coordinate_system
+
+    @current_coordinate_system.setter
+    def current_coordinate_system(self, value):
+        if value is not None and value is not StageCoordinate and value is not ChipCoordinate:
+            raise ValueError("Unsuppored coordinate system: {}".format(value))
+
+        self._current_coordinate_system = value
 
     #
     #   
@@ -290,8 +304,7 @@ class Calibration:
                 return self.full_transformation.stage_to_chip(
                     StageCoordinate.from_list(self.stage.position))
             elif self.state == State.SINGLE_POINT_FIXED:
-                return self.single_point_transformation.stage_to_chip(
-                    StageCoordinate.from_list(self.stage.position))
+                return self.single_point_transformation.stage_to_chip(StageCoordinate.from_list(self.stage.position))
 
     #
     #   Movement methods
@@ -337,7 +350,7 @@ class Calibration:
             if self.state == State.FULLY_CALIBRATED:
                 stage_coordinate = self.full_transformation.chip_to_stage(coordinate)
             elif self.state == State.SINGLE_POINT_FIXED:
-                stage_coordinate == self.single_point_transformation.chip_to_stage(coordinate)
+                stage_coordinate = self.single_point_transformation.chip_to_stage(coordinate)
 
         self.stage.move_absolute(
             x=stage_coordinate.x,

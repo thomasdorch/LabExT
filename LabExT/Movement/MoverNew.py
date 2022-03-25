@@ -384,11 +384,25 @@ class MoverNew:
         self._z_lift = height
 
     #
-    #   LEGACY SUPPORT!!
+    #
+    #
+
+    @contextmanager
+    def in_coordinate_system(self, coordinate_system):
+        for calibration in self.calibrations.values():
+            calibration.current_coordinate_system = coordinate_system
+
+        yield
+
+        for calibration in self.calibrations.values():
+            calibration.current_coordinate_system = None
+
+    #
+    #   Position Methods
     #
 
     @assert_connected_stages
-    def get_absolute_stage_coords(self):
+    def get_stage_positions(self):
         """Read stage positions in all two resp. four dimensions in um.
 
            return format for 2 stages is [lx, ly, rx, ry]
@@ -399,37 +413,15 @@ class MoverNew:
         list of double
             current absolute stage coordinates of all configured dimensions
 
-        Raises
-        ------
-        RuntimeError
-            If stages could not be initialised.
+        !!! PEAK SEACHER !!!
         """
         coords = []
-        for stage in self.active_stages:
-            coords += stage.get_current_position()
+        if self.left_calibration:
+            coords += self.left_calibration.position.to_list()[:2]
+        if self.right_calibration:
+            coords += self.right_calibration.position.to_list()[:2]
 
         return coords
-
-    @assert_connected_stages
-    def move_absolute_direct(self, *args):
-        if self.left_calibration:
-            self.left_calibration.stage.move_absolute([args[0], args[1], 0])
-        if self.right_calibration:
-            self.right_calibration.stage.move_absolute([args[2], args[3], 0])
-
-    #
-    #
-    #
-
-    @contextmanager
-    def set_equal_coordinate_system(self, coordinate_system):
-        for calibration in self.calibrations.values():
-            calibration.current_coordinate_system = coordinate_system
-
-        yield
-
-        for calibration in self.calibrations.values():
-            calibration.current_coordinate_system = None
 
     #
     #   Movement Methods
@@ -447,44 +439,43 @@ class MoverNew:
         if top or bottom:
             raise UnsupportedOperation("Top and Bottom stage movement is not supported yet!")
 
-        with self.left_calibration.in_coordinate_system(ChipCoordinate):
-            with self.right_calibration.in_coordinate_system(ChipCoordinate):
-                left_position = self.left_calibration.position
-                right_position = self.right_calibration.position
+        with self.in_coordinate_system(ChipCoordinate):
+            left_position = self.left_calibration.position
+            right_position = self.right_calibration.position
 
-                assert left_position.x < right_position.x - self.MIN_FIBER_DISTANCE, "For this collision avoidance algorithm to work, the left stage must " \
-                                                "ALWAYS be left of the right stage. Starting points not far enough apart..."
-                assert left_position.x + left.x < right_position.x  + right.x - self.MIN_FIBER_DISTANCE, "For this collision avoidance algorithm to work, the left stage must " \
-                                                    "ALWAYS be left of the right stage. Target points not far enough apart..."
+            assert left_position.x < right_position.x - self.MIN_FIBER_DISTANCE, "For this collision avoidance algorithm to work, the left stage must " \
+                                            "ALWAYS be left of the right stage. Starting points not far enough apart..."
+            assert left_position.x + left.x < right_position.x  + right.x - self.MIN_FIBER_DISTANCE, "For this collision avoidance algorithm to work, the left stage must " \
+                                                "ALWAYS be left of the right stage. Target points not far enough apart..."
 
-                # case handling, depending on the half-plane's relative move
-                # noinspection PyChainedComparisons
-                if left.x < 0 and right.x < 0:
-                    # obv. left moves first
-                    #  1. move left stage from start to target
-                    #  2. move right stage from start to target
-                    self.left_calibration.move_relative(left)
-                    self.right_calibration.move_relative(right)
-                elif left.x < 0 and right.x >= 0:
-                    # doesnt matter which one moves first as both move avay from each other
-                    #  1. move left stage from start to target
-                    #  2. move right stage from start to target
-                    self.left_calibration.move_relative(left)
-                    self.right_calibration.move_relative(right)
-                elif left.x >= 0 and right.x < 0:
-                    # this can lead to collisions, but since end coordinates are also far enough apart, we are good to go
-                    #  1. move right stage from start to target
-                    #  2. move left stage from start to target
-                    self.right_calibration.move_relative(right)
-                    self.left_calibration.move_relative(left)
-                elif left.x >= 0 and right.x >= 0:
-                    # obv. right moves first
-                    #  1. move right stage from start to target
-                    #  2. move left stage from start to target
-                    self.right_calibration.move_relative(right)
-                    self.left_calibration.move_relative(left)
-                else:
-                    raise AssertionError('Coder did not do proper case distinction for positive-ness of two variables!')
+            # case handling, depending on the half-plane's relative move
+            # noinspection PyChainedComparisons
+            if left.x < 0 and right.x < 0:
+                # obv. left moves first
+                #  1. move left stage from start to target
+                #  2. move right stage from start to target
+                self.left_calibration.move_relative(left)
+                self.right_calibration.move_relative(right)
+            elif left.x < 0 and right.x >= 0:
+                # doesnt matter which one moves first as both move avay from each other
+                #  1. move left stage from start to target
+                #  2. move right stage from start to target
+                self.left_calibration.move_relative(left)
+                self.right_calibration.move_relative(right)
+            elif left.x >= 0 and right.x < 0:
+                # this can lead to collisions, but since end coordinates are also far enough apart, we are good to go
+                #  1. move right stage from start to target
+                #  2. move left stage from start to target
+                self.right_calibration.move_relative(right)
+                self.left_calibration.move_relative(left)
+            elif left.x >= 0 and right.x >= 0:
+                # obv. right moves first
+                #  1. move right stage from start to target
+                #  2. move left stage from start to target
+                self.right_calibration.move_relative(right)
+                self.left_calibration.move_relative(left)
+            else:
+                raise AssertionError('Coder did not do proper case distinction for positive-ness of two variables!')
 
 
     @assert_connected_stages
@@ -494,7 +485,7 @@ class MoverNew:
         if Orientation.TOP in movement.keys() or Orientation.BOTTOM in movement.keys():
             raise UnsupportedOperation("Top and Bottom stage movement is not supported yet!")
 
-        with self.set_equal_coordinate_system(ChipCoordinate):
+        with self.in_coordinate_system(ChipCoordinate):
             left = movement.get(Orientation.LEFT)
             right = movement.get(Orientation.RIGHT)
 
@@ -574,7 +565,7 @@ class MoverNew:
         if self._stages_lifted:
             return
 
-        with self.set_equal_coordinate_system(ChipCoordinate):
+        with self.in_coordinate_system(ChipCoordinate):
             for calibration in self.calibrations.values():
                 calibration.move_relative(ChipCoordinate(0,0,self.z_lift))
 
@@ -585,7 +576,7 @@ class MoverNew:
         if not self._stages_lifted:
             return
 
-        with self.set_equal_coordinate_system(ChipCoordinate):
+        with self.in_coordinate_system(ChipCoordinate):
             for calibration in self.calibrations.values():
                 calibration.move_relative(ChipCoordinate(0,0,-self.z_lift))
 
@@ -604,3 +595,19 @@ class MoverNew:
             port)
         port = port or self._port_by_orientation.get(orientation)
         return self.calibrations.get((orientation, port), default)
+
+    #
+    #   LEGACY
+    #
+
+    @property
+    def dimension_names(self) -> list:
+        if self.left_calibration and not self.right_calibration:
+            return ['X', 'Y']
+        elif self.right_calibration and not self.left_calibration:
+            return ['X', 'Y']
+        elif self.left_calibration and self.right_calibration:
+            return ['Left X', 'Left Y', 'Right X', 'Right Y']
+
+        return []
+
