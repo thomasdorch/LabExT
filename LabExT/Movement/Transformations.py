@@ -269,7 +269,7 @@ class SinglePointTransformation(Transformation):
         if not self.is_valid:
             raise RuntimeError("Cannot translate with invalid fixation. ")
 
-        return self._axes_rotation.rotate_chip_to_stage(chip_coordinate) + self._stage_offset
+        return self._axes_rotation.rotate_chip_to_stage(chip_coordinate) - self._stage_offset
 
     def stage_to_chip(self, stage_coordinate: Type[StageCoordinate]) -> Type[ChipCoordinate]:
         """
@@ -278,7 +278,7 @@ class SinglePointTransformation(Transformation):
         if not self.is_valid:
             raise RuntimeError("Cannot translate with invalid fixation. ")
 
-        return self._axes_rotation.rotate_stage_to_chip(stage_coordinate - self._stage_offset)
+        return self._axes_rotation.rotate_stage_to_chip(stage_coordinate + self._stage_offset)
 
 
 class KabschRotation(Transformation):

@@ -288,6 +288,40 @@ class AxesRotationTest(unittest.TestCase):
                     self.rotation.rotate_chip_to_stage(self.rotation.rotate_stage_to_chip(StageCoordinate(*expected_stage_coordinate))).to_array()))
 
 
+class SinglePointTransformationTest(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.rotation = AxesRotation()
+        self.transformation = SinglePointTransformation(self.rotation)
+
+    @parameterized.expand([
+        (-1000, 1000),
+        (-10000, 10000),
+        (-100000, 100000)
+    ])
+    def test_foo(self,  upper, lower):
+        for (chip_x_axis, chip_y_axis, chip_z_axis) in permutations(Axis):
+            for (x_axis_direction, y_axis_direction, z_axis_direction) in product(Direction, repeat=3): 
+            
+                self.rotation.update(chip_x_axis, x_axis_direction, Axis.X)
+                self.rotation.update(chip_y_axis, y_axis_direction, Axis.Y)
+                self.rotation.update(chip_z_axis, z_axis_direction, Axis.Z)
+
+                chip_coordinate = ChipCoordinate(*sample(range(upper, lower), 2), z=0)
+                stage_coordinate = StageCoordinate(*sample(range(upper, lower), 3))
+
+                self.transformation.update(CoordinatePairing(
+                    object(),
+                    stage_coordinate,
+                    object(),
+                    chip_coordinate
+                ))
+
+                self.assertEqual(self.transformation.chip_to_stage(chip_coordinate).to_list(), stage_coordinate.to_list())
+                self.assertEqual(self.transformation.stage_to_chip(stage_coordinate).to_list(), chip_coordinate.to_list())
+
+
+
 class KabschRotationTest(unittest.TestCase):
     def setUp(self) -> None:
         self.kabsch = KabschRotation()

@@ -7,7 +7,6 @@ This program is free software and comes with ABSOLUTELY NO WARRANTY; for details
 
 from contextlib import contextmanager
 from io import UnsupportedOperation
-from shutil import move
 
 from LabExT.Movement.Transformations import ChipCoordinate
 from bidict import bidict, ValueDuplicationError, KeyDuplicationError, OnDup, RAISE
