@@ -7,7 +7,7 @@ This program is free software and comes with ABSOLUTELY NO WARRANTY; for details
 
 import logging
 from functools import wraps
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, abstractproperty
 from os.path import dirname, join
 from typing import NamedTuple
 
@@ -179,10 +179,14 @@ class Stage(ABC):
     def get_current_position(self):
         pass
 
-    @abstractmethod
-    def move_relative(self, x, y):
+    @abstractproperty
+    def position(self) -> list:
         pass
 
     @abstractmethod
-    def move_absolute(self, pos):
+    def move_relative(self, x: float, y: float, z: float = 0, wait_for_stopping: bool = True) -> None:
+        pass
+
+    @abstractmethod
+    def move_absolute(self, x: float = None, y: float = None, z: float = None, wait_for_stopping: bool = True):
         pass

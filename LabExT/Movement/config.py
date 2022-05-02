@@ -57,3 +57,11 @@ class State(BaseEnum):
     FULLY_CALIBRATED = 4
 
     def __str__(self) -> str: return self.name.replace('_', ' ').capitalize()
+
+    def __lt__(self, other):
+        """
+        Defines a total ordering.
+        """
+        if self.__class__ is other.__class__:
+            return self.value < other.value
+        return NotImplemented

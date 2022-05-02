@@ -11,6 +11,7 @@ import ctypes as ct
 from enum import Enum
 from tkinter import TclError
 from typing import List
+import warnings
 
 from LabExT.Movement.config import Axis
 from LabExT.Movement.Stage import Stage, StageMeta, StageError, assert_stage_connected, assert_driver_loaded
@@ -328,6 +329,9 @@ class Stage3DSmarAct(Stage):
             mode : MovementType
                 Channel movement type
             """
+            if diff is None:
+                return
+
             self.movement_mode = mode
             if self.movement_mode == MovementType.RELATIVE:
                 self._stage._exit_if_error(
@@ -631,9 +635,29 @@ class Stage3DSmarAct(Stage):
         list
             Returns current position in [x,y] format in units of um.
         """
+        warnings.warn("This method will be removed in the future. Please use the property 'position'.", DeprecationWarning)
+
         return [
             self.channels[Axis.X].position,
             self.channels[Axis.Y].position
+        ]
+
+    @property
+    @assert_driver_loaded
+    @assert_stage_connected
+    def position(self) -> list:
+        """
+        Get current position of the stages in micrometers.
+
+        Returns
+        -------
+        list
+            Returns current position in [x,y,z] format in units of um.
+        """
+        return [
+            self.channels[Axis.X].position,
+            self.channels[Axis.Y].position,
+            self.channels[Axis.Z].position
         ]
 
     @assert_driver_loaded
@@ -668,26 +692,34 @@ class Stage3DSmarAct(Stage):
 
     @assert_driver_loaded
     @assert_stage_connected
-    def move_absolute(self, pos, wait_for_stopping: bool = True):
+    def move_absolute(self, x: float = None, y: float = None, z: float = None, wait_for_stopping: bool = True):
         """Performs an absolute movement to the specified position in units of micrometers.
 
         Parameters
         ----------
-        position : list
-            Position in [x,y] format measured in um
+        x : float
+            Position in x format measured in um
+        y : float
+            Position in y format measured in um
+        z : float
+            Position in z format measured in um
         wait_for_stopping : bool
             Wait until all axes have stopped.
         """
-        self._logger.debug(
-            'Want to absolute move %s to x = %s um and y = %s um',
-            self.address,
-            pos[0],
-            pos[1])
+        ### LEGACY SUPPORT
+        # In the old version, a list for 2 coordinates [x,y] was passed to this method. Z-movement was not possible.
+        if isinstance(x, list):
+            pos = x[:2]
+            warnings.warn("The signature of the method has changed, please use the new one in the future.", DeprecationWarning)
 
-        self.channels[Axis.X].move(
-            diff=pos[0], mode=MovementType.ABSOLUTE)
-        self.channels[Axis.Y].move(
-            diff=pos[1], mode=MovementType.ABSOLUTE)
+            self.channels[Axis.X].move(
+                diff=pos[0], mode=MovementType.ABSOLUTE)
+            self.channels[Axis.Y].move(
+                diff=pos[1], mode=MovementType.ABSOLUTE)
+        else:
+            self.channels[Axis.X].move(diff=x, mode=MovementType.ABSOLUTE)
+            self.channels[Axis.Y].move(diff=y, mode=MovementType.ABSOLUTE)
+            self.channels[Axis.Z].move(diff=z, mode=MovementType.ABSOLUTE)
 
         if wait_for_stopping:
             self._wait_for_stopping()
